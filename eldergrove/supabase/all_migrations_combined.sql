@@ -1,5 +1,3 @@
-
-c:\Users\Public\Documents\Eldergrove\eldergrove\supabase>type "migrations\20251129082008_create_profiles.sql" 
 create table public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   username text unique,
@@ -8,7 +6,6 @@ create table public.profiles (
   xp bigint default 0,
   created_at timestamptz default now()
 );
-c:\Users\Public\Documents\Eldergrove\eldergrove\supabase>type "migrations\20251129082214_enable_rls_profiles.sql" 
 -- Enable Row Level Security (RLS) on profiles table
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 
@@ -21,7 +18,6 @@ CREATE POLICY "Users view own profile" ON public.profiles
 CREATE POLICY "Users update own profile" ON public.profiles
   FOR UPDATE
   USING ( auth.uid() = id );
-c:\Users\Public\Documents\Eldergrove\eldergrove\supabase>type "migrations\20251129082400_create_profile_on_signup_trigger.sql" 
 -- handle new user
 create or replace function public.handle_new_user()
 returns trigger
@@ -40,7 +36,6 @@ create trigger on_auth_user_created
   after insert on auth.users
   for each row
   execute function public.handle_new_user();
-c:\Users\Public\Documents\Eldergrove\eldergrove\supabase>type "migrations\20251129090200_create_crops.sql" 
 -- Create the crops table for the farming system
 create table public.crops (
   id serial primary key,
@@ -53,7 +48,6 @@ create table public.crops (
 insert into public.crops (name, grow_minutes, yield_crystals) values
 ('Wheat', 2, 10),
 ('Carrot', 5, 25);
-c:\Users\Public\Documents\Eldergrove\eldergrove\supabase>type "migrations\20251129091100_create_farm_plots.sql" 
 -- Create the farm_plots table for the farming system
 create table public.farm_plots (
   player_id uuid not null references public.profiles(id) on delete cascade,
@@ -63,7 +57,6 @@ create table public.farm_plots (
   ready_at timestamptz,
   primary key (player_id, plot_index)
 );
-c:\Users\Public\Documents\Eldergrove\eldergrove\supabase>type "migrations\20251129091600_create_seed_farm_plots_trigger.sql" 
 -- Seed 6 empty farm plots after profile creation
 
 create or replace function public.seed_farm_plots_for_profile()
@@ -83,7 +76,6 @@ create trigger on_profile_created
   after insert on public.profiles
   for each row
   execute function public.seed_farm_plots_for_profile();
-c:\Users\Public\Documents\Eldergrove\eldergrove\supabase>type "migrations\20251129093035_enable_rls_crops_farm_plots.sql" 
 -- Enable RLS on crops table (shared reference data)
 ALTER TABLE public.crops
   ENABLE ROW LEVEL SECURITY;
@@ -132,7 +124,6 @@ CREATE POLICY "Users delete own farm plots"
   FOR DELETE
   TO authenticated
   USING (player_id = auth.uid());
-c:\Users\Public\Documents\Eldergrove\eldergrove\supabase>type "migrations\20251129095100_create_plant_crop_rpc.sql" 
 -- Create RPC function to plant a crop on an empty farm plot
 
 create or replace function public.plant_crop(p_plot_index integer, p_crop_id integer)
@@ -170,7 +161,6 @@ end;
 $$;
 
 comment on function public.plant_crop(integer, integer) is 'Plant a crop on an empty farm plot';
-c:\Users\Public\Documents\Eldergrove\eldergrove\supabase>type "migrations\20251129205928_create_harvest_plot_rpc.sql" 
 -- Create RPC function to harvest a ready crop from a farm plot, add crystals to player, and clear plot
 
 create or replace function public.harvest_plot(p_plot_index integer)
@@ -230,7 +220,6 @@ end;
 $$;
 
 comment on function public.harvest_plot(integer) is 'Harvest a ready crop from farm plot, award yield_crystals to player, clear plot. Returns new player crystal balance.';
-c:\Users\Public\Documents\Eldergrove\eldergrove\supabase>type "migrations\20251129213201_create_recipes.sql" 
 -- Create the recipes table for the factory system
 create table public.recipes (
   id serial primary key,
@@ -243,7 +232,6 @@ create table public.recipes (
 -- Seed initial recipe
 insert into public.recipes (name, input, output, minutes) values
 ('Bread', '{"Wheat": 3}', '{"crystals": 15}', 3);
-c:\Users\Public\Documents\Eldergrove\eldergrove\supabase>type "migrations\20251129214100_create_factories.sql" 
 -- Create the factories table for the factory system
 create table public.factories (
   player_id uuid not null references public.profiles(id) on delete cascade,
@@ -295,7 +283,6 @@ create trigger on_profile_created_factories
   after insert on public.profiles
   for each row
   execute function public.seed_factories_for_profile();
-c:\Users\Public\Documents\Eldergrove\eldergrove\supabase>type "migrations\20251129214300_create_factory_queue.sql" 
 -- Create the factory_queue table for managing factory production queues
 create table public.factory_queue (
   player_id uuid not null references public.profiles(id) on delete cascade,
@@ -331,14 +318,11 @@ create policy "Users delete own factory_queue" on public.factory_queue
 
 -- Index for efficient querying of finished productions
 create index factory_queue_finishes_at_idx on public.factory_queue (finishes_at);
-c:\Users\Public\Documents\Eldergrove\eldergrove\supabase>type "migrations\20251129214632_enable_realtime_factory_queue.sql" 
 -- Enable realtime updates for factory_queue table
 ALTER PUBLICATION supabase_realtime ADD TABLE public.factory_queue;
-c:\Users\Public\Documents\Eldergrove\eldergrove\supabase>type "migrations\20251129215649_add_resources_to_profiles.sql" 
 -- Add resources jsonb column to profiles for storing inventory resources like wheat, crystals etc.
 alter table public.profiles 
 add column resources jsonb default '{}'::jsonb;
-c:\Users\Public\Documents\Eldergrove\eldergrove\supabase>type "migrations\20251129215729_create_start_factory_production_rpc.sql" 
 -- Create RPC function to start factory production: check inventory, deduct resources, add to queue slot
 create or replace function public.start_factory_production(
   p_factory_type text,
@@ -433,7 +417,6 @@ end;
 $$;
 
 comment on function public.start_factory_production(text, text) is 'Start production in a factory: deducts input resources from player inventory, adds entry to factory queue (max 2 slots).';
-c:\Users\Public\Documents\Eldergrove\eldergrove\supabase>type "migrations\20251129231416_create_collect_factory_rpc.sql" 
 -- Create RPC function to collect completed factory production from Rune Bakery slot: check ready, add crystals from recipe output, remove queue entry
 create or replace function public.collect_factory(p_slot integer)
 returns bigint
@@ -499,7 +482,6 @@ end;
 $$;
 
 comment on function public.collect_factory(integer) is 'Collect completed Rune Bakery production from slot: awards recipe output crystals, clears queue slot. Returns new player crystals balance.';
-c:\Users\Public\Documents\Eldergrove\eldergrove\supabase>type "migrations\20251129234114_create_inventory.sql" 
 -- Create inventory table to track player items (wheat, bread, etc.)
 CREATE TABLE IF NOT EXISTS public.inventory (
   player_id uuid NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
@@ -531,7 +513,6 @@ CREATE POLICY "Users can delete own inventory" ON public.inventory
 
 -- Enable realtime subscriptions
 ALTER PUBLICATION supabase_realtime ADD TABLE public.inventory;
-c:\Users\Public\Documents\Eldergrove\eldergrove\supabase>type "migrations\20251129234300_create_seed_starting_inventory_trigger.sql" 
 -- Seed starting inventory (wheat x10) after profile creation
 
 create or replace function public.seed_starting_inventory_for_profile()
@@ -550,7 +531,6 @@ create trigger on_profile_inventory_seeded
   after insert on public.profiles
   for each row
   execute function public.seed_starting_inventory_for_profile();
-c:\Users\Public\Documents\Eldergrove\eldergrove\supabase>type "migrations\20251129235943_update_rpcs_inventory_integration.sql" 
 -- Phase 6.5: Integrate farm/factory RPCs with inventory table (item_id 1=wheat, 2=bread, 3=crystals)
 
 -- Update bread recipe to produce bread and crystals
@@ -801,7 +781,6 @@ END;
 $$;
 
 COMMENT ON FUNCTION public.collect_factory(integer) IS 'Collect completed Rune Bakery production: adds recipe output (bread/crystals item_ids 2/3) to inventory, clears slot. Returns new crystals quantity.';
-c:\Users\Public\Documents\Eldergrove\eldergrove\supabase>type "migrations\20251130011800_add_last_claimed_date_to_profiles.sql" 
 -- Add last_claimed_date column to profiles table for daily reward tracking
 alter table public.profiles
 add column last_claimed_date date;
@@ -868,7 +847,6 @@ END;
 $$;
 
 COMMENT ON FUNCTION public.claim_daily_reward() IS 'Claim daily reward of 500 crystals for authenticated user. Can only be claimed once per day.';
-c:\Users\Public\Documents\Eldergrove\eldergrove\supabase>type "migrations\20251130052100_enable_rls_recipes.sql" 
 -- Enable RLS on recipes table (shared reference data)
 ALTER TABLE public.recipes
   ENABLE ROW LEVEL SECURITY;
@@ -880,7 +858,6 @@ CREATE POLICY "Enable read access for authenticated users on recipes"
   FOR SELECT
   TO authenticated
   USING (true);
-c:\Users\Public\Documents\Eldergrove\eldergrove\supabase>type "migrations\20251130120000_create_coven_tables.sql" 
 -- Create coven table
 CREATE TABLE public.coven (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -1362,7 +1339,6 @@ END;
 $$ LANGUAGE plpgsql;
 
 COMMENT ON FUNCTION public.update_member_last_active() IS 'Update last active timestamp for a coven member';
-c:\Users\Public\Documents\Eldergrove\eldergrove\supabase>type "migrations\20251201000000_expand_crops.sql" 
 -- Expand crops table with more crop types and add item_id mapping
 
 -- Add item_id column to crops table to map to inventory items
@@ -1391,7 +1367,6 @@ ALTER TABLE public.crops ALTER COLUMN item_id SET NOT NULL;
 COMMENT ON COLUMN public.crops.item_id IS 'Maps to inventory item_id for harvested crops';
 
 
-c:\Users\Public\Documents\Eldergrove\eldergrove\supabase>type "migrations\20251201000001_update_harvest_rpc_for_all_crops.sql" 
 -- Update harvest_plot RPC to handle all crop types and yield appropriate items based on crop.item_id
 
 CREATE OR REPLACE FUNCTION public.harvest_plot(p_plot_index integer)
@@ -1468,7 +1443,6 @@ $$;
 COMMENT ON FUNCTION public.harvest_plot(integer) IS 'Harvest ready crop from farm plot, adds crop item (based on crop.item_id) yield to inventory, clears plot. Returns new item quantity.';
 
 
-c:\Users\Public\Documents\Eldergrove\eldergrove\supabase>type "migrations\20251201000002_expand_recipes.sql" 
 -- Expand recipes table with new recipes using different plant combinations
 -- Note: Recipe inputs/outputs use lowercase names that map to item_ids in RPCs
 
@@ -1490,7 +1464,6 @@ ON CONFLICT (name) DO NOTHING;
 COMMENT ON TABLE public.recipes IS 'Factory recipes: input/output use lowercase item names that map to item_ids in RPC functions';
 
 
-c:\Users\Public\Documents\Eldergrove\eldergrove\supabase>type "migrations\20251201000003_update_factory_production_rpc.sql" 
 -- Update start_factory_production RPC to handle all new crop/item types
 
 CREATE OR REPLACE FUNCTION public.start_factory_production(
@@ -1601,7 +1574,6 @@ $$;
 COMMENT ON FUNCTION public.start_factory_production(text, text) IS 'Start factory production: deducts input resources (all crop/item types) from inventory, adds to queue (max 2 slots).';
 
 
-c:\Users\Public\Documents\Eldergrove\eldergrove\supabase>type "migrations\20251201000004_create_seed_shop.sql" 
 -- Create seed shop system for purchasing seeds with crystals
 
 -- Create seed_shop table with crop prices
@@ -1693,7 +1665,6 @@ COMMENT ON FUNCTION public.buy_seed(integer) IS 'Purchase seed for a crop using 
 -- direct planting after "purchasing" (which is really just paying to unlock/plant).
 
 
-c:\Users\Public\Documents\Eldergrove\eldergrove\supabase>type "migrations\20251201000005_create_marketplace.sql" 
 -- Create marketplace system for selling items for crystals
 
 -- Create marketplace table with sell prices
@@ -1799,7 +1770,6 @@ $$;
 COMMENT ON FUNCTION public.sell_item(integer, integer) IS 'Sell items from inventory for crystals. Returns success status, crystals awarded, and new balance.';
 
 
-c:\Users\Public\Documents\Eldergrove\eldergrove\supabase>type "migrations\20251202000000_create_skyport_orders.sql" 
 -- Create skyport orders system for transportation orders
 
 -- Create skyport_orders table
@@ -2041,7 +2011,6 @@ $$;
 COMMENT ON FUNCTION public.fulfill_skyport_order(integer) IS 'Fulfill a skyport order: deduct requirements from inventory, award rewards, mark complete';
 
 
-c:\Users\Public\Documents\Eldergrove\eldergrove\supabase>type "migrations\20251202000001_create_buildings.sql" 
 -- Create buildings table for city building placement system
 
 CREATE TABLE IF NOT EXISTS public.buildings (
@@ -2304,7 +2273,6 @@ BEGIN
 END $$;
 
 
-c:\Users\Public\Documents\Eldergrove\eldergrove\supabase>type "migrations\20251202000002_create_storage_system.sql" 
 -- Create storage management system with warehouse upgrades
 
 -- Add storage capacity to profiles
@@ -2468,7 +2436,6 @@ $$;
 COMMENT ON FUNCTION public.get_storage_usage(uuid) IS 'Get current storage usage statistics for a player';
 
 
-c:\Users\Public\Documents\Eldergrove\eldergrove\supabase>type "migrations\20251202000003_create_building_upgrades.sql" 
 -- Create building upgrade system for factories and buildings
 
 -- Ensure factories table has level column (it should already exist)
@@ -2699,7 +2666,6 @@ $$;
 COMMENT ON FUNCTION public.upgrade_building(integer) IS 'Upgrade a building: increases level, may provide additional population';
 
 
-c:\Users\Public\Documents\Eldergrove\eldergrove\supabase>type "migrations\20251202000004_create_achievements.sql" 
 -- Create achievement system
 
 -- Create achievements table (master list)
@@ -2916,7 +2882,6 @@ $$;
 -- for better control and to avoid performance issues
 
 
-c:\Users\Public\Documents\Eldergrove\eldergrove\supabase>type "migrations\20251202000005_create_quests.sql" 
 -- Create quest system for tutorial, daily, and weekly quests
 
 -- Create quests table (master list)
@@ -3243,7 +3208,6 @@ $$;
 COMMENT ON FUNCTION public.generate_daily_quests(uuid) IS 'Generate daily quests for a player';
 
 
-c:\Users\Public\Documents\Eldergrove\eldergrove\supabase>type "migrations\20251202000006_create_mining_system.sql" 
 -- Create mining system with dig mechanics, tools, and ore types
 
 -- Create ore_types table (master list of ores)
@@ -3702,7 +3666,6 @@ FROM public.profiles
 ON CONFLICT DO NOTHING;
 
 
-c:\Users\Public\Documents\Eldergrove\eldergrove\supabase>type "migrations\20251202000007_create_zoo_system.sql" 
 -- Create zoo/animal system with enclosures, breeding, and passive resource generation
 
 -- Create animal_types table (master list)
@@ -4102,7 +4065,6 @@ $$;
 COMMENT ON FUNCTION public.collect_bred_animal(integer) IS 'Collect a bred animal from an enclosure';
 
 
-c:\Users\Public\Documents\Eldergrove\eldergrove\supabase>type "migrations\20251202000008_create_friends_system.sql" 
 -- Create friend/neighbor system for social features
 
 -- Create friends table
@@ -4432,7 +4394,6 @@ $$;
 COMMENT ON FUNCTION public.visit_friend_town(uuid) IS 'Visit a friend''s town (read-only view)';
 
 
-c:\Users\Public\Documents\Eldergrove\eldergrove\supabase>type "migrations\20251202000009_create_market_box.sql" 
 -- Create market box (player trading) system
 
 -- Create market_listings table
@@ -4674,7 +4635,6 @@ $$;
 COMMENT ON FUNCTION public.cancel_listing(integer) IS 'Cancel a listing: returns items to seller inventory';
 
 
-c:\Users\Public\Documents\Eldergrove\eldergrove\supabase>type "migrations\20251202000010_create_coven_tasks.sql" 
 -- Create co-op tasks system for coven enhancements
 
 -- Create coven_tasks table
@@ -5078,7 +5038,6 @@ $$;
 COMMENT ON FUNCTION public.auto_contribute_coven_tasks(text, integer) IS 'Automatically contribute to active coven tasks for the player';
 
 
-c:\Users\Public\Documents\Eldergrove\eldergrove\supabase>type "migrations\20251202000011_create_regatta_system.sql" 
 -- Create regatta competitions system (weekly competitive events)
 
 -- Create regatta_events table
@@ -5477,7 +5436,6 @@ $$;
 COMMENT ON FUNCTION public.create_weekly_regatta() IS 'Create a weekly regatta event (to be called by cron)';
 
 
-c:\Users\Public\Documents\Eldergrove\eldergrove\supabase>type "migrations\20251202000012_add_population_requirements.sql" 
 -- Add population requirements system for building unlocks
 
 -- Add population_required column to building_types
@@ -5702,7 +5660,6 @@ $$;
 COMMENT ON FUNCTION public.get_available_buildings() IS 'Get buildings available to the player based on population requirements';
 
 
-c:\Users\Public\Documents\Eldergrove\eldergrove\supabase>type "migrations\20251202000013_create_town_expansion.sql" 
 -- Create town expansion system (expandable town grid)
 
 -- Add town_size column to profiles if it doesn't exist
@@ -5863,7 +5820,6 @@ $$;
 COMMENT ON FUNCTION public.get_expansion_cost(text) IS 'Get the cost to expand town in a given direction';
 
 
-c:\Users\Public\Documents\Eldergrove\eldergrove\supabase>type "migrations\20251202000014_create_decorations_system.sql" 
 -- Create decorations system (purely cosmetic items)
 
 -- Create decorations table
@@ -6066,7 +6022,6 @@ $$;
 COMMENT ON FUNCTION public.remove_decoration(integer) IS 'Remove a decoration from the town grid (no refund).';
 
 
-c:\Users\Public\Documents\Eldergrove\eldergrove\supabase>type "migrations\20251202000015_create_push_notifications.sql" 
 -- Create push notifications system
 
 -- Create push_subscriptions table to store device tokens
@@ -6231,7 +6186,6 @@ $$;
 COMMENT ON FUNCTION public.get_player_subscriptions(uuid) IS 'Get active push subscriptions for a player (server-side use)';
 
 
-c:\Users\Public\Documents\Eldergrove\eldergrove\supabase>type "migrations\20251202000016_create_aether_system.sql" 
 -- Create Aether (premium currency) system
 
 -- Add aether column to profiles if it doesn't exist
@@ -6458,7 +6412,6 @@ $$;
 COMMENT ON FUNCTION public.award_aether(uuid, integer, text) IS 'Award aether to a player (admin/system use)';
 
 
-c:\Users\Public\Documents\Eldergrove\eldergrove\supabase>type "migrations\20251202000017_implement_speed_ups.sql" 
 -- Implement speed-up system for factory production
 
 -- Create speed_ups table to track active speed-ups
@@ -6767,7 +6720,6 @@ $$;
 COMMENT ON FUNCTION public.get_active_boost_multiplier(text) IS 'Get active boost multiplier for a boost type';
 
 
-c:\Users\Public\Documents\Eldergrove\eldergrove\supabase>type "migrations\20251202000018_integrate_boost_multipliers.sql" 
 -- Integrate boost multipliers into reward systems
 
 -- Update collect_factory to apply crystal boost multiplier

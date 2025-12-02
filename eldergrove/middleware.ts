@@ -1,8 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+import { createServerClient } from '@supabase/ssr'
 
 export async function middleware(request: NextRequest) {
   const requestUrl = new URL(request.url)
@@ -12,28 +9,28 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next()
   }
 
-  // Create a Supabase client without cookie handling in middleware
-  const supabase = createClient(supabaseUrl, supabaseKey)
+  // Create a Supabase server client with proper cookie handling
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return request.cookies.getAll()
+        },
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value, options }) => {
+            request.cookies.set(name, value)
+          })
+        },
+      },
+    }
+  )
 
-  // Get session from cookies manually
-  const token = request.cookies.get('sb-access-token')?.value
-  const refreshToken = request.cookies.get('sb-refresh-token')?.value
+  // Get the current session
+  const { data: { session }, error } = await supabase.auth.getSession()
 
-  if (!token || !refreshToken) {
-    return NextResponse.redirect(new URL('/login', request.url))
-  }
-
-  // Set the auth session
-  const { data, error } = await supabase.auth.setSession({
-    access_token: token,
-    refresh_token: refreshToken,
-  })
-
-  if (error) {
-    return NextResponse.redirect(new URL('/login', request.url))
-  }
-
-  if (!data.session) {
+  if (error || !session) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
