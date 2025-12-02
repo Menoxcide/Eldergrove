@@ -134,6 +134,18 @@ const CropField: React.FC<CropFieldProps> = ({ plot }) => {
     }
   };
 
+  const handleHarvest = async () => {
+    if (!isReady) return;
+    try {
+      setHasAutoHarvested(true); // Prevent auto-harvest from triggering
+      await harvestCrop(plot.plot_index);
+      await fetchPlots();
+    } catch (error) {
+      console.error('Failed to harvest crop:', error);
+      setHasAutoHarvested(false); // Reset on error so it can retry
+    }
+  };
+
   const isEmpty = !crop_id;
   const isGrowing = !!crop_id && !!ready_at && new Date() < new Date(ready_at);
   const isReady = !!crop_id && !!ready_at && new Date() >= new Date(ready_at);
@@ -141,7 +153,12 @@ const CropField: React.FC<CropFieldProps> = ({ plot }) => {
 
   return (
     <>
-      <div className="relative w-24 h-24 border-4 border-gray-300 rounded-2xl shadow-xl bg-gradient-to-br from-amber-200 via-yellow-300 to-orange-300 hover:scale-105 transition-all duration-200 cursor-pointer group">
+      <div 
+        className={`relative w-24 h-24 border-4 border-gray-300 rounded-2xl shadow-xl bg-gradient-to-br from-amber-200 via-yellow-300 to-orange-300 transition-all duration-200 group ${
+          isReady ? 'cursor-pointer hover:scale-105' : isGrowing ? 'cursor-default' : 'cursor-pointer hover:scale-105'
+        }`}
+        onClick={isReady ? handleHarvest : undefined}
+      >
         {isEmpty ? (
           <button
             className="absolute inset-0 rounded-2xl flex flex-col items-center justify-center bg-gradient-to-br from-emerald-500 to-green-600 text-white font-bold text-xs hover:from-emerald-400 hover:to-green-500 transition-all px-1 py-1 border border-white/20"
@@ -165,7 +182,10 @@ const CropField: React.FC<CropFieldProps> = ({ plot }) => {
                 {formatTime(timeLeft)}
               </div>
               <button
-                onClick={() => setShowSpeedUpModal(true)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowSpeedUpModal(true);
+                }}
                 className="absolute top-1 right-1 bg-purple-600 hover:bg-purple-700 text-white text-xs px-2 py-1 rounded-full transition-colors shadow-lg"
                 title="Speed Up Growth"
               >
