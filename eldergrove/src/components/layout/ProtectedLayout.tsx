@@ -14,65 +14,39 @@ const ProtectedLayout: React.FC<ProtectedLayoutProps> = ({ children }) => {
   const router = useRouter();
 
   useEffect(() => {
-    const supabase = createClient();
     let isMounted = true;
 
-    const checkSession = async () => {
-      console.log('ProtectedLayout: Checking session...');
+    // In production, trust the middleware for initial authentication
+    // Just do a quick session check to confirm
+    const quickSessionCheck = async () => {
+      try {
+        const supabase = createClient();
+        const { data: { session } } = await supabase.auth.getSession();
 
-      // Try multiple times with increasing delays to handle production timing issues
-      for (let attempt = 1; attempt <= 3; attempt++) {
-        console.log(`ProtectedLayout: Session check attempt ${attempt}`);
-
-        const { data: { session }, error } = await supabase.auth.getSession();
-        console.log('ProtectedLayout: Session check result:', session ? 'Session found' : 'No session', 'error:', error);
-
-        if (session) {
-          console.log('ProtectedLayout: User authenticated:', session.user?.email);
+        if (session && isMounted) {
+          console.log('ProtectedLayout: Session confirmed:', session.user?.email);
+          setAuthenticated(true);
+          setLoading(false);
+        } else {
+          console.log('ProtectedLayout: No session found, redirecting to login');
           if (isMounted) {
-            setAuthenticated(true);
-            setLoading(false);
+            router.replace('/login');
           }
-          return;
         }
-
-        // Wait before next attempt (1.5s, 2.5s, 3.5s)
-        if (attempt < 3) {
-          await new Promise(resolve => setTimeout(resolve, 1000 + attempt * 1000));
+      } catch (error) {
+        console.error('ProtectedLayout: Error checking session:', error);
+        if (isMounted) {
+          router.replace('/login');
         }
-      }
-
-      // If we get here, no session was found after all attempts
-      console.log('ProtectedLayout: No session found after all attempts, redirecting to login');
-      if (isMounted) {
-        router.replace('/login');
       }
     };
 
-    checkSession();
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      console.log('ProtectedLayout: Auth state change:', event, session ? 'Session present' : 'No session');
-
-      if (session) {
-        console.log('ProtectedLayout: Auth state change - User:', session.user?.email);
-      }
-
-      if (isMounted) {
-        if (!session) {
-          console.log('ProtectedLayout: Auth state change - No session, redirecting to login');
-          router.replace('/login');
-        } else {
-          console.log('ProtectedLayout: Auth state change - Session confirmed, showing game');
-          setAuthenticated(true);
-          setLoading(false);
-        }
-      }
-    });
+    // Small delay to let middleware/session establish
+    const timer = setTimeout(quickSessionCheck, 500);
 
     return () => {
       isMounted = false;
-      subscription.unsubscribe();
+      clearTimeout(timer);
     };
   }, [router]);
 
