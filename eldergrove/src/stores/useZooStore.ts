@@ -129,6 +129,9 @@ export const useZooStore = create<ZooState>((set, get) => ({
       if (error) throw error
       toast.success('Animal added to enclosure!')
       await fetchEnclosures()
+      // Refresh player profile to update crystals
+      const { usePlayerStore } = await import('./usePlayerStore')
+      await usePlayerStore.getState().fetchPlayerProfile()
     } catch (err: any) {
       setError(err.message)
       toast.error(`Failed to add animal: ${err.message}`)
