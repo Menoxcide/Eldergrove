@@ -19,25 +19,33 @@ const ProtectedLayout: React.FC<ProtectedLayoutProps> = ({ children }) => {
 
     const checkSession = async () => {
       console.log('ProtectedLayout: Checking session...');
-      // Give OAuth callbacks more time to establish session
-      await new Promise(resolve => setTimeout(resolve, 1500));
 
-      const { data: { session }, error } = await supabase.auth.getSession();
-      console.log('ProtectedLayout: Session check result:', session ? 'Session found' : 'No session', 'error:', error);
+      // Try multiple times with increasing delays to handle production timing issues
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        console.log(`ProtectedLayout: Session check attempt ${attempt}`);
 
-      if (session) {
-        console.log('ProtectedLayout: User authenticated:', session.user?.email);
+        const { data: { session }, error } = await supabase.auth.getSession();
+        console.log('ProtectedLayout: Session check result:', session ? 'Session found' : 'No session', 'error:', error);
+
+        if (session) {
+          console.log('ProtectedLayout: User authenticated:', session.user?.email);
+          if (isMounted) {
+            setAuthenticated(true);
+            setLoading(false);
+          }
+          return;
+        }
+
+        // Wait before next attempt (1.5s, 2.5s, 3.5s)
+        if (attempt < 3) {
+          await new Promise(resolve => setTimeout(resolve, 1000 + attempt * 1000));
+        }
       }
 
+      // If we get here, no session was found after all attempts
+      console.log('ProtectedLayout: No session found after all attempts, redirecting to login');
       if (isMounted) {
-        if (!session) {
-          console.log('ProtectedLayout: No session, redirecting to login');
-          router.replace('/login');
-        } else {
-          console.log('ProtectedLayout: Session confirmed, showing game');
-          setAuthenticated(true);
-          setLoading(false);
-        }
+        router.replace('/login');
       }
     };
 
