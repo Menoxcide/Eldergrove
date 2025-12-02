@@ -73,6 +73,14 @@ export async function claimDailyReward(): Promise<DailyRewardResponse> {
       alreadyClaimed: false
     };
 
+    // Refresh player profile to ensure store is in sync
+    try {
+      const { usePlayerStore } = await import('@/stores/usePlayerStore');
+      await usePlayerStore.getState().fetchPlayerProfile();
+    } catch (profileError) {
+      console.warn('Failed to refresh player profile after daily reward:', profileError);
+    }
+
     toast.success(response.message, {
       icon: '💎',
     });

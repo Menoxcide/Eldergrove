@@ -27,6 +27,7 @@ interface PlayerState {
   setLoading: (loading: boolean) => void
   setError: (error: string | null) => void
   addCrystals: (amount: number) => void
+  removeCrystals: (amount: number) => void
   setPopulation: (population: number) => void
   setTownSize: (size: number) => void
   fetchPlayerProfile: () => Promise<void>
@@ -60,6 +61,9 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   setError: (error) => set({ error }),
   addCrystals: (amount) => set((state) => ({
     crystals: state.crystals + amount
+  })),
+  removeCrystals: (amount) => set((state) => ({
+    crystals: Math.max(0, state.crystals - amount)
   })),
   setPopulation: (population) => set({ population }),
   setTownSize: (size) => set({ townSize: size }),
