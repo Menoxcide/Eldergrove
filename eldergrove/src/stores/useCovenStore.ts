@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { createClient } from '@/lib/supabase/client';
-import toast from 'react-hot-toast';
+import { handleError } from '@/hooks/useErrorHandler';
 import {
   getCovenByPlayerId,
   createCoven as createCovenService,
@@ -58,8 +58,9 @@ export const useCovenStore = create<CovenState>((set, get) => ({
       }
       const coven = await getCovenByPlayerId(user.id);
       setCurrentCoven(coven);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to fetch coven';
+      setError(errorMessage);
       console.error('Error fetching coven:', err);
       setCurrentCoven(null);
     } finally {
@@ -70,12 +71,13 @@ export const useCovenStore = create<CovenState>((set, get) => ({
     const { fetchCoven, setError } = get();
     try {
       await createCovenService(name, emblem);
-      toast.success(`Coven "${name}" created successfully!`);
+      const { useGameMessageStore } = await import('@/stores/useGameMessageStore');
+      useGameMessageStore.getState().addMessage('success', `Coven "${name}" created successfully!`);
       await fetchCoven();
-    } catch (err: any) {
-      const errorMsg = err.message || 'Failed to create coven';
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to create coven';
       setError(errorMsg);
-      toast.error(errorMsg);
+      handleError(err, errorMsg);
       throw err;
     }
   },
@@ -83,12 +85,13 @@ export const useCovenStore = create<CovenState>((set, get) => ({
     const { fetchCoven, setError } = get();
     try {
       await joinCovenService(covenId);
-      toast.success('Successfully joined the coven!');
+      const { useGameMessageStore } = await import('@/stores/useGameMessageStore');
+      useGameMessageStore.getState().addMessage('success', 'Successfully joined the coven!');
       await fetchCoven();
-    } catch (err: any) {
-      const errorMsg = err.message || 'Failed to join coven';
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to join coven';
       setError(errorMsg);
-      toast.error(errorMsg);
+      handleError(err, errorMsg);
       throw err;
     }
   },
@@ -96,12 +99,13 @@ export const useCovenStore = create<CovenState>((set, get) => ({
     const { fetchCoven, setError } = get();
     try {
       await leaveCovenService();
-      toast.success('Left the coven successfully');
+      const { useGameMessageStore } = await import('@/stores/useGameMessageStore');
+      useGameMessageStore.getState().addMessage('success', 'Left the coven successfully');
       set({ currentCoven: null });
-    } catch (err: any) {
-      const errorMsg = err.message || 'Failed to leave coven';
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to leave coven';
       setError(errorMsg);
-      toast.error(errorMsg);
+      handleError(err, errorMsg);
       throw err;
     }
   },
@@ -109,12 +113,13 @@ export const useCovenStore = create<CovenState>((set, get) => ({
     const { fetchCoven, setError } = get();
     try {
       await kickMemberService(memberId);
-      toast.success('Member kicked successfully');
+      const { useGameMessageStore } = await import('@/stores/useGameMessageStore');
+      useGameMessageStore.getState().addMessage('success', 'Member kicked successfully');
       await fetchCoven();
-    } catch (err: any) {
-      const errorMsg = err.message || 'Failed to kick member';
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to kick member';
       setError(errorMsg);
-      toast.error(errorMsg);
+      handleError(err, errorMsg);
       throw err;
     }
   },
@@ -122,12 +127,13 @@ export const useCovenStore = create<CovenState>((set, get) => ({
     const { fetchCoven, setError } = get();
     try {
       await updateMemberRoleService(memberId, role);
-      toast.success(`Member role updated to ${role}`);
+      const { useGameMessageStore } = await import('@/stores/useGameMessageStore');
+      useGameMessageStore.getState().addMessage('success', `Member role updated to ${role}`);
       await fetchCoven();
-    } catch (err: any) {
-      const errorMsg = err.message || 'Failed to update member role';
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to update member role';
       setError(errorMsg);
-      toast.error(errorMsg);
+      handleError(err, errorMsg);
       throw err;
     }
   },
@@ -138,8 +144,9 @@ export const useCovenStore = create<CovenState>((set, get) => ({
     try {
       const covens = await searchCovensService(query);
       setAvailableCovens(covens);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to search covens';
+      setError(errorMessage);
       console.error('Error searching covens:', err);
     } finally {
       setLoading(false);
@@ -152,8 +159,9 @@ export const useCovenStore = create<CovenState>((set, get) => ({
     try {
       const covens = await getAllCovensService();
       setAvailableCovens(covens);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to refresh covens';
+      setError(errorMessage);
       console.error('Error refreshing covens:', err);
     } finally {
       setLoading(false);
@@ -172,7 +180,9 @@ export const useCovenStore = create<CovenState>((set, get) => ({
         { event: '*', schema: 'public', table: 'coven_members' },
         () => {
           // Refresh coven data when members change
-          fetchCoven();
+          fetchCoven().catch((err) => {
+            console.error('Error in subscription callback:', err);
+          });
         }
       )
       // Also listen to coven table changes
@@ -180,10 +190,20 @@ export const useCovenStore = create<CovenState>((set, get) => ({
         'postgres_changes',
         { event: '*', schema: 'public', table: 'coven' },
         () => {
-          fetchCoven();
+          fetchCoven().catch((err) => {
+            console.error('Error in subscription callback:', err);
+          });
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          console.log('Subscribed to coven updates');
+        } else if (status === 'CHANNEL_ERROR') {
+          const { setError } = get();
+          setError('Failed to subscribe to real-time updates');
+          console.error('Subscription error for coven');
+        }
+      });
 
     return () => {
       supabase.removeChannel(channel);

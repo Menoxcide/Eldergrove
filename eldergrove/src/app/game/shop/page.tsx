@@ -2,11 +2,13 @@
 
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { useInventoryStore, getItemName } from '@/stores/useInventoryStore';
+import { useInventoryStore } from '@/stores/useInventoryStore';
 import { usePlayerStore } from '@/stores/usePlayerStore';
-import { getItemIcon } from '@/lib/itemUtils';
+import { getItemIcon, getItemNameWithLevel } from '@/lib/itemUtils';
 import { Skeleton } from '@/components/ui/LoadingSkeleton';
-import toast from 'react-hot-toast';
+import { useErrorHandler } from '@/hooks/useErrorHandler';
+import Tooltip from '@/components/ui/Tooltip';
+import { getItemTooltip } from '@/lib/tooltipUtils';
 
 interface MarketplaceItem {
   item_id: number;
@@ -16,11 +18,12 @@ interface MarketplaceItem {
 
 export default function ShopPage() {
   const { inventory, fetchInventory } = useInventoryStore();
-  const { crystals, addCrystals } = usePlayerStore();
+  const { crystals, setCrystals } = usePlayerStore();
   const [marketplace, setMarketplace] = useState<MarketplaceItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [selling, setSelling] = useState<number | null>(null);
   const [sellQuantity, setSellQuantity] = useState<Record<number, number>>({});
+  const { handleError, showError } = useErrorHandler();
 
   useEffect(() => {
     fetchMarketplace();
@@ -39,8 +42,7 @@ export default function ShopPage() {
       if (error) throw error;
       setMarketplace(data || []);
     } catch (error: any) {
-      console.error('Error fetching marketplace:', error);
-      toast.error('Failed to load marketplace');
+      handleError(error, 'Failed to load marketplace');
     } finally {
       setLoading(false);
     }
@@ -48,7 +50,7 @@ export default function ShopPage() {
 
   const handleSell = async (itemId: number, quantity: number) => {
     if (quantity <= 0) {
-      toast.error('Quantity must be greater than 0');
+      showError('Invalid Quantity', 'Quantity must be greater than 0.');
       return;
     }
 
@@ -65,13 +67,18 @@ export default function ShopPage() {
       const result = data as { success: boolean; crystals_awarded: number; new_crystal_balance: number };
       
       if (result.success) {
-        toast.success(`Sold ${quantity} ${getItemName(itemId)} for ${result.crystals_awarded} crystals!`);
-        addCrystals(result.crystals_awarded);
+        const { useGameMessageStore } = await import('@/stores/useGameMessageStore');
+        useGameMessageStore.getState().addMessage(
+          'success',
+          `Sold ${quantity} ${getItemNameWithLevel(itemId)} for ${result.crystals_awarded} crystals!`
+        );
+        // Use the returned crystal balance directly to avoid race conditions
+        setCrystals(result.new_crystal_balance);
         await fetchInventory();
         setSellQuantity(prev => ({ ...prev, [itemId]: 0 }));
       }
     } catch (error: any) {
-      toast.error(`Failed to sell: ${error.message}`);
+      handleError(error, error.message);
     } finally {
       setSelling(null);
     }
@@ -137,17 +144,19 @@ export default function ShopPage() {
               const totalPrice = price * currentSellQty;
 
               return (
-                <div
+                <Tooltip
                   key={item.item_id}
-                  className="bg-white/10 backdrop-blur-md rounded-2xl p-6 border border-white/20"
+                  content={getItemTooltip(item.item_id, quantity)}
+                  position="top"
                 >
-                  <div className="flex items-center gap-4 mb-4">
-                    <span className="text-5xl">{getItemIcon(item.item_id)}</span>
-                    <div className="flex-1">
-                      <h3 className="text-xl font-bold text-white">{getItemName(item.item_id)}</h3>
-                      <p className="text-slate-300 text-sm">You have: {quantity.toLocaleString()}</p>
+                  <div className="bg-white/10 backdrop-blur-md rounded-2xl p-6 border border-white/20">
+                    <div className="flex items-center gap-4 mb-4">
+                      <span className="text-5xl">{getItemIcon(item.item_id)}</span>
+                      <div className="flex-1">
+                        <h3 className="text-xl font-bold text-white">{getItemNameWithLevel(item.item_id)}</h3>
+                        <p className="text-slate-300 text-sm">You have: {quantity.toLocaleString()}</p>
+                      </div>
                     </div>
-                  </div>
 
                   <div className="mb-4">
                     <div className="flex items-center justify-between mb-2">
@@ -161,7 +170,18 @@ export default function ShopPage() {
                   </div>
 
                   <div className="mb-4">
-                    <label className="block text-slate-300 text-sm mb-2">Quantity to sell:</label>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="block text-slate-300 text-sm">Quantity to sell:</label>
+                      <button
+                        onClick={() => setSellQuantity(prev => ({
+                          ...prev,
+                          [item.item_id]: maxSell
+                        }))}
+                        className="px-3 py-1 text-xs bg-yellow-600 hover:bg-yellow-500 text-white rounded-lg font-semibold transition-colors"
+                      >
+                        Max
+                      </button>
+                    </div>
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => setSellQuantity(prev => ({
@@ -206,7 +226,8 @@ export default function ShopPage() {
                   >
                     {selling === item.item_id ? 'Selling...' : `Sell ${currentSellQty} for 💎 ${totalPrice}`}
                   </button>
-                </div>
+                  </div>
+                </Tooltip>
               );
             })}
           </div>

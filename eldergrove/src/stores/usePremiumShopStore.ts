@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { createClient } from '@/lib/supabase/client'
-import toast from 'react-hot-toast'
+import { handleError } from '@/hooks/useErrorHandler'
 
 export interface PremiumShopItem {
   id: number
@@ -67,25 +67,27 @@ export const usePremiumShopStore = create<PremiumShopState>((set, get) => ({
       const result = data as { success: boolean; item_type: string; [key: string]: any }
       
       if (result.success) {
-        toast.success('Purchase successful!')
+        let message = '✅ Purchase successful!'
+        
+        // Handle item-specific logic
+        if (result.item_type === 'speed_up') {
+          message += `\n\nSpeed-up activated: ${result.minutes} minutes`
+        } else if (result.item_type === 'boost') {
+          message += `\n\nBoost activated for ${result.duration_hours} hours!`
+        } else if (result.item_type === 'bundle') {
+          message += '\n\nBundle items added to your inventory!'
+        }
+        
+        const { useGameMessageStore } = await import('@/stores/useGameMessageStore')
+        useGameMessageStore.getState().addMessage('success', message)
         
         // Refresh player profile to update aether/crystals
         const { usePlayerStore } = await import('./usePlayerStore')
         await usePlayerStore.getState().fetchPlayerProfile()
-        
-        // Handle item-specific logic
-        if (result.item_type === 'speed_up') {
-          toast.success(`Speed-up activated: ${result.minutes} minutes`)
-        } else if (result.item_type === 'boost') {
-          toast.success(`Boost activated for ${result.duration_hours} hours!`)
-        } else if (result.item_type === 'bundle') {
-          toast.success('Bundle items added to your inventory!')
-        }
       }
     } catch (err: any) {
       setError(err.message)
-      toast.error(`Failed to purchase item: ${err.message}`)
-      console.error('Error purchasing item:', err)
+      handleError(err, err.message)
       throw err
     }
   },

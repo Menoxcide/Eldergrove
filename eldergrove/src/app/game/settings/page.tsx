@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { usePlayerStore } from '@/stores/usePlayerStore';
 import { requestNotificationPermission, subscribeToPushNotifications, registerPushSubscription, updateNotificationPreferences } from '@/lib/pushNotifications';
 import { createClient } from '@/lib/supabase/client';
-import toast from 'react-hot-toast';
+import { useErrorHandler } from '@/hooks/useErrorHandler';
 
 export default function SettingsPage() {
   const { aether, crystals } = usePlayerStore();
@@ -18,6 +18,7 @@ export default function SettingsPage() {
     coven_task_complete: true
   });
   const [loading, setLoading] = useState(false);
+  const { handleError, showError } = useErrorHandler();
 
   useEffect(() => {
     checkNotificationStatus();
@@ -62,7 +63,7 @@ export default function SettingsPage() {
     try {
       const hasPermission = await requestNotificationPermission();
       if (!hasPermission) {
-        toast.error('Notification permission denied');
+        showError('Permission Denied', 'Notification permission was denied. Please enable notifications in your browser settings.');
         setLoading(false);
         return;
       }
@@ -74,12 +75,13 @@ export default function SettingsPage() {
           platform: navigator.platform
         });
         setNotificationsEnabled(true);
-        toast.success('Notifications enabled!');
+        const { useGameMessageStore } = await import('@/stores/useGameMessageStore');
+        useGameMessageStore.getState().addMessage('success', 'Notifications enabled!');
       } else {
-        toast.error('Failed to subscribe to notifications');
+        showError('Subscription Failed', 'Failed to subscribe to push notifications. Please try again.');
       }
     } catch (error: any) {
-      toast.error(`Failed to enable notifications: ${error.message}`);
+      handleError(error, error.message);
     } finally {
       setLoading(false);
     }
@@ -91,9 +93,10 @@ export default function SettingsPage() {
     
     try {
       await updateNotificationPreferences({ [key]: value });
-      toast.success('Preferences updated');
+      const { useGameMessageStore } = await import('@/stores/useGameMessageStore');
+      useGameMessageStore.getState().addMessage('success', 'Preferences updated');
     } catch (error: any) {
-      toast.error(`Failed to update preferences: ${error.message}`);
+      handleError(error, error.message);
       // Revert on error
       setPreferences(preferences);
     }

@@ -1,6 +1,7 @@
 import ProtectedLayout from '@/components/layout/ProtectedLayout';
 import ResourceBar from '@/components/game/ResourceBar';
 import BottomNav from '@/components/layout/BottomNav';
+import GameMessageLog from '@/components/game/GameMessageLog';
 
 export default function GameLayout({
   children,
@@ -14,6 +15,7 @@ export default function GameLayout({
         {children}
       </div>
       <BottomNav />
+      <GameMessageLog />
     </ProtectedLayout>
   );
 }

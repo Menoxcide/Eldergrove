@@ -6,14 +6,16 @@ import { useRouter, usePathname } from 'next/navigation';
 const BottomNav: React.FC = () => {
   const router = useRouter();
   const pathname = usePathname();
-  const [activeTab, setActiveTab] = useState<'town' | 'farm' | 'factory' | 'mine' | 'zoo' | 'coven' | 'profile'>('town');
+  const [activeTab, setActiveTab] = useState<'town' | 'farm' | 'factory' | 'mine' | 'armory' | 'zoo' | 'inventory' | 'coven' | 'profile'>('town');
 
   const tabs = [
     { id: 'town' as const, icon: '🏠', label: 'Town', path: '/game' },
     { id: 'farm' as const, icon: '🌱', label: 'Farm', path: '/game/farm' },
     { id: 'factory' as const, icon: '⚙️', label: 'Factory', path: '/game/factory' },
     { id: 'mine' as const, icon: '⛏️', label: 'Mine', path: '/game/mine' },
+    { id: 'armory' as const, icon: '⚔️', label: 'Armory', path: '/game/armory' },
     { id: 'zoo' as const, icon: '🐾', label: 'Zoo', path: '/game/zoo' },
+    { id: 'inventory' as const, icon: '🎒', label: 'Inventory', path: '/game/inventory' },
     { id: 'coven' as const, icon: '👥', label: 'Coven', path: '/game/coven' },
     { id: 'profile' as const, icon: '👤', label: 'Profile', path: '/game/profile' },
   ];

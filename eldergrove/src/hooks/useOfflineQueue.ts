@@ -1,6 +1,5 @@
 import { createClient } from '@/lib/supabase/client'
 import { get, set } from 'idb-keyval'
-import toast from 'react-hot-toast'
 
 const QUEUE_KEY = 'eldergrove-offline-queue'
 
@@ -15,6 +14,7 @@ type ActionType =
   | 'harvest_plot'
   | 'start_factory_production'
   | 'collect_factory'
+  | 'collect_armory'
 
 type ActionDataMap = {
   plant_crop: {
@@ -29,6 +29,9 @@ type ActionDataMap = {
     p_recipe_name: string
   }
   collect_factory: {
+    p_slot: number
+  }
+  collect_armory: {
     p_slot: number
   }
 }
@@ -69,7 +72,8 @@ export function useOfflineQueue() {
         const queue: QueuedAction[] = (await get(QUEUE_KEY)) || []
         await set(QUEUE_KEY, [...queue, action])
         console.log('Action queued for offline replay:', action)
-        toast.success('Action queued for later processing')
+        const { useGameMessageStore } = await import('@/stores/useGameMessageStore')
+        useGameMessageStore.getState().addMessage('info', 'Action queued for later processing')
         return false
       } else {
         console.error('Non-network RPC error:', error)

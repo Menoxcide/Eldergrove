@@ -6,7 +6,7 @@ import { useCovenStore } from '@/stores/useCovenStore';
 import { useCovenTasksStore } from '@/stores/useCovenTasksStore';
 import { usePlayerStore } from '@/stores/usePlayerStore';
 import { Skeleton } from '@/components/ui/LoadingSkeleton';
-import toast from 'react-hot-toast';
+import { useErrorHandler } from '@/hooks/useErrorHandler';
 
 export default function CovenPage() {
   const router = useRouter();
@@ -43,6 +43,7 @@ export default function CovenPage() {
   const [covenName, setCovenName] = useState('');
   const [covenEmblem, setCovenEmblem] = useState('🌟');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const { showError } = useErrorHandler();
 
   const emblems = ['🌟', '⚡', '🔥', '💎', '🌙', '☀️', '🌊', '🌿', '⚔️', '🛡️', '🎭', '🔮'];
 
@@ -77,7 +78,7 @@ export default function CovenPage() {
   const handleCreateCoven = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!covenName.trim()) {
-      toast.error('Please enter a coven name');
+      showError('Coven Name Required', 'Please enter a name for your coven.');
       return;
     }
     setIsSubmitting(true);

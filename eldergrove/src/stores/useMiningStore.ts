@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { createClient } from '@/lib/supabase/client'
-import toast from 'react-hot-toast'
+import { handleError } from '@/hooks/useErrorHandler'
 
 export interface OreType {
   id: number
@@ -53,6 +53,7 @@ export interface MiningState {
   mineOre: (toolType?: string) => Promise<void>
   repairTool: (toolType: string) => Promise<void>
   upgradeTool: (toolType: string) => Promise<void>
+  restoreEnergyWithCrystals: () => Promise<void>
   subscribeToMining: () => () => void
 }
 
@@ -86,17 +87,27 @@ export const useMiningStore = create<MiningState>((set, get) => ({
       
       if (data) {
         // Parse JSONB artifacts
-        const mineDig = {
-          ...data,
-          artifacts: typeof data.artifacts === 'string' ? JSON.parse(data.artifacts) : data.artifacts
+        try {
+          const mineDig = {
+            ...data,
+            artifacts: typeof data.artifacts === 'string' ? JSON.parse(data.artifacts) : (data.artifacts || [])
+          }
+          setMineDig(mineDig)
+        } catch (parseError) {
+          console.error('Error parsing mine dig artifacts:', parseError, data)
+          const mineDig = {
+            ...data,
+            artifacts: []
+          }
+          setMineDig(mineDig)
         }
-        setMineDig(mineDig)
       } else {
         setMineDig(null)
       }
     } catch (err: any) {
-      setError(err.message)
-      console.error('Error fetching mine dig:', err)
+      const errorMessage = err?.message || 'Failed to fetch mine dig data'
+      setError(errorMessage)
+      handleError(err, errorMessage)
     } finally {
       setLoading(false)
     }
@@ -119,8 +130,9 @@ export const useMiningStore = create<MiningState>((set, get) => ({
       if (error) throw error
       setTools(data || [])
     } catch (err: any) {
-      setError(err.message)
-      console.error('Error fetching tools:', err)
+      const errorMessage = err?.message || 'Failed to fetch mining tools'
+      setError(errorMessage)
+      handleError(err, errorMessage)
     } finally {
       setLoading(false)
     }
@@ -139,8 +151,9 @@ export const useMiningStore = create<MiningState>((set, get) => ({
       if (error) throw error
       setOreTypes(data || [])
     } catch (err: any) {
-      setError(err.message)
-      console.error('Error fetching ore types:', err)
+      const errorMessage = err?.message || 'Failed to fetch ore types'
+      setError(errorMessage)
+      handleError(err, errorMessage)
     } finally {
       setLoading(false)
     }
@@ -164,22 +177,31 @@ export const useMiningStore = create<MiningState>((set, get) => ({
         tool_durability: number
       }
 
-      if (result.success) {
+      if (result && result.success) {
+        const { useGameMessageStore } = await import('@/stores/useGameMessageStore')
         if (result.ore_found && result.ore_name) {
-          toast.success(`Found ${result.ore_name}! Depth: ${result.new_depth}`)
+          useGameMessageStore.getState().addMessage(
+            'success',
+            `Found ${result.ore_name}! Depth: ${result.new_depth}`
+          )
         } else {
-          toast('No ore found this time', { icon: '⛏️' })
+          useGameMessageStore.getState().addMessage('info', 'No ore found this time')
         }
         await fetchMineDig()
         await fetchTools()
-        // Refresh inventory
+        // Refresh inventory to show collected ores
         const { useInventoryStore } = await import('./useInventoryStore')
-        useInventoryStore.getState().fetchInventory()
+        await useInventoryStore.getState().fetchInventory()
+        // Refresh player profile to update XP and level (XP is granted by mine_ore)
+        const { usePlayerStore } = await import('./usePlayerStore')
+        await usePlayerStore.getState().fetchPlayerProfile()
+      } else {
+        throw new Error('Mining operation did not complete successfully')
       }
     } catch (err: any) {
-      setError(err.message)
-      toast.error(`Failed to mine: ${err.message}`)
-      console.error('Error mining ore:', err)
+      const errorMessage = err.message || 'An unexpected error occurred while mining'
+      setError(errorMessage)
+      handleError(err, errorMessage)
       throw err
     }
   },
@@ -191,12 +213,16 @@ export const useMiningStore = create<MiningState>((set, get) => ({
         p_tool_type: toolType
       })
       if (error) throw error
-      toast.success('Tool repaired!')
+      const { useGameMessageStore } = await import('@/stores/useGameMessageStore')
+      useGameMessageStore.getState().addMessage('success', 'Tool repaired!')
       await fetchTools()
+      // Refresh player profile to update crystals (deducted by repair_tool RPC)
+      const { usePlayerStore } = await import('./usePlayerStore')
+      await usePlayerStore.getState().fetchPlayerProfile()
     } catch (err: any) {
-      setError(err.message)
-      toast.error(`Failed to repair tool: ${err.message}`)
-      console.error('Error repairing tool:', err)
+      const errorMessage = err.message || 'An unexpected error occurred while repairing the tool'
+      setError(errorMessage)
+      handleError(err, errorMessage)
       throw err
     }
   },
@@ -208,12 +234,52 @@ export const useMiningStore = create<MiningState>((set, get) => ({
         p_tool_type: toolType
       })
       if (error) throw error
-      toast.success('Tool upgraded!')
+      const { useGameMessageStore } = await import('@/stores/useGameMessageStore')
+      useGameMessageStore.getState().addMessage('success', 'Tool upgraded!')
       await fetchTools()
+      // Refresh player profile to update crystals (deducted by upgrade_mining_tool RPC)
+      const { usePlayerStore } = await import('./usePlayerStore')
+      await usePlayerStore.getState().fetchPlayerProfile()
     } catch (err: any) {
-      setError(err.message)
-      toast.error(`Failed to upgrade tool: ${err.message}`)
-      console.error('Error upgrading tool:', err)
+      const errorMessage = err.message || 'An unexpected error occurred while upgrading the tool'
+      setError(errorMessage)
+      handleError(err, errorMessage)
+      throw err
+    }
+  },
+  restoreEnergyWithCrystals: async () => {
+    const { fetchMineDig, setError } = get()
+    try {
+      const supabase = createClient()
+      const { data, error } = await supabase.rpc('restore_mining_energy_crystals')
+      if (error) throw error
+
+      const result = data as {
+        success: boolean
+        energy_restored: number
+        crystals_spent: number
+        new_crystals: number
+        message?: string
+      }
+
+      if (result && result.success) {
+        const { useGameMessageStore } = await import('@/stores/useGameMessageStore')
+        useGameMessageStore.getState().addMessage(
+          'success',
+          `Energy fully restored! (${result.energy_restored} energy restored)`
+        )
+        await fetchMineDig()
+        // Use the returned crystal balance directly to avoid race conditions
+        const { usePlayerStore } = await import('./usePlayerStore')
+        usePlayerStore.getState().setCrystals(result.new_crystals)
+      } else {
+        const message = result?.message || 'Energy restoration failed'
+        throw new Error(message)
+      }
+    } catch (err: any) {
+      const errorMessage = err.message || 'An unexpected error occurred while restoring energy'
+      setError(errorMessage)
+      handleError(err, errorMessage)
       throw err
     }
   },
@@ -225,17 +291,29 @@ export const useMiningStore = create<MiningState>((set, get) => ({
         'postgres_changes',
         { event: '*', schema: 'public', table: 'mine_digs' },
         () => {
-          get().fetchMineDig()
+          get().fetchMineDig().catch((err) => {
+            console.error('Error in subscription callback:', err)
+          })
         }
       )
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'mining_tools' },
         () => {
-          get().fetchTools()
+          get().fetchTools().catch((err) => {
+            console.error('Error in subscription callback:', err)
+          })
         }
       )
-      .subscribe()
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          console.log('Subscribed to mining updates')
+        } else if (status === 'CHANNEL_ERROR') {
+          const { setError } = get()
+          setError('Failed to subscribe to real-time updates')
+          console.error('Subscription error for mining')
+        }
+      })
 
     return () => {
       supabase.removeChannel(channel)

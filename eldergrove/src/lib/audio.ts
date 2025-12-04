@@ -1,9 +1,10 @@
 import { Howl, Howler } from 'howler';
 
-// Create sound effects with fallbacks
+// Create sound effects with fallbacks (WAV first since we generate those)
 const plantSound = new Howl({
-  src: ['/audio/plant.mp3', '/audio/plant.wav'],
+  src: ['/audio/plant.wav', '/audio/plant.mp3'],
   volume: 0.5,
+  preload: true,
   onloaderror: (id: number, error: any) => {
     console.warn('Failed to load plant sound:', error);
   },
@@ -13,8 +14,9 @@ const plantSound = new Howl({
 });
 
 const harvestSound = new Howl({
-  src: ['/audio/harvest.mp3', '/audio/harvest.wav'],
+  src: ['/audio/harvest.wav', '/audio/harvest.mp3'],
   volume: 0.5,
+  preload: true,
   onloaderror: (id: number, error: any) => {
     console.warn('Failed to load harvest sound:', error);
   },
@@ -24,8 +26,9 @@ const harvestSound = new Howl({
 });
 
 const collectSound = new Howl({
-  src: ['/audio/collect.mp3', '/audio/collect.wav'],
+  src: ['/audio/collect.wav', '/audio/collect.mp3'],
   volume: 0.5,
+  preload: true,
   onloaderror: (id: number, error: any) => {
     console.warn('Failed to load collect sound:', error);
   },

@@ -2,8 +2,10 @@
 
 import React from 'react';
 import { Recipe } from '@/stores/useFactoryStore';
-import { getItemIcon } from '@/lib/itemUtils';
-import { getItemName } from '@/stores/useInventoryStore';
+import { getItemIcon, getItemNameWithLevel } from '@/lib/itemUtils';
+import Tooltip from '@/components/ui/Tooltip';
+import { getRecipeTooltip } from '@/lib/tooltipUtils';
+import { ITEM_NAME_TO_ID } from '@/lib/itemMappings';
 
 interface RecipeCardProps {
   recipe: Recipe;
@@ -13,22 +15,8 @@ interface RecipeCardProps {
 }
 
 const RecipeCard: React.FC<RecipeCardProps> = ({ recipe, canCraft, onStart, inventory }) => {
-  const itemNameToId: Record<string, number> = {
-    'wheat': 1,
-    'carrot': 2,
-    'potato': 3,
-    'tomato': 4,
-    'corn': 5,
-    'pumpkin': 6,
-    'bread': 8,
-    'berry': 11,
-    'herbs': 12,
-    'magic_mushroom': 13,
-    'enchanted_flower': 14
-  };
-
   const getItemId = (itemName: string): number => {
-    return itemNameToId[itemName.toLowerCase()] || 0;
+    return ITEM_NAME_TO_ID[itemName.toLowerCase()] || 0;
   };
 
   const getAvailableQuantity = (itemId: number): number => {
@@ -37,9 +25,10 @@ const RecipeCard: React.FC<RecipeCardProps> = ({ recipe, canCraft, onStart, inve
   };
 
   return (
-    <div className={`bg-white/10 backdrop-blur-md rounded-2xl p-6 border-2 transition-all ${
-      canCraft ? 'border-green-500/50 hover:border-green-400' : 'border-red-500/30 opacity-75'
-    }`}>
+    <Tooltip content={getRecipeTooltip(recipe, canCraft, inventory)} position="top">
+      <div className={`bg-white/10 backdrop-blur-md rounded-2xl p-6 border-2 transition-all ${
+        canCraft ? 'border-green-500/50 hover:border-green-400' : 'border-red-500/30 opacity-75'
+      }`}>
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-xl font-bold text-white">{recipe.name}</h3>
         <span className="text-yellow-400 text-sm">⏱ {recipe.minutes}m</span>
@@ -62,7 +51,7 @@ const RecipeCard: React.FC<RecipeCardProps> = ({ recipe, canCraft, onStart, inve
               >
                 <span className="text-lg">{getItemIcon(itemId)}</span>
                 <span className={`text-xs ${hasEnough ? 'text-white' : 'text-red-300'}`}>
-                  {requiredQty} {getItemName(itemId)}
+                  {requiredQty} {getItemNameWithLevel(itemId)}
                 </span>
                 {!hasEnough && (
                   <span className="text-xs text-red-400">({availableQty} available)</span>
@@ -82,7 +71,7 @@ const RecipeCard: React.FC<RecipeCardProps> = ({ recipe, canCraft, onStart, inve
               <div key={itemName} className="flex items-center gap-1 px-2 py-1 rounded-lg bg-blue-900/50">
                 <span className="text-lg">{itemName === 'crystals' ? '💎' : getItemIcon(itemId)}</span>
                 <span className="text-xs text-white">
-                  {qty} {itemName === 'crystals' ? 'Crystals' : getItemName(itemId)}
+                  {qty} {itemName === 'crystals' ? 'Crystals' : getItemNameWithLevel(itemId)}
                 </span>
               </div>
             );
@@ -102,6 +91,7 @@ const RecipeCard: React.FC<RecipeCardProps> = ({ recipe, canCraft, onStart, inve
         {canCraft ? 'Start Production' : 'Insufficient Materials'}
       </button>
     </div>
+    </Tooltip>
   );
 };
 

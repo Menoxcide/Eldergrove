@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { createClient } from '@/lib/supabase/client'
-import toast from 'react-hot-toast'
+import { handleError } from '@/hooks/useErrorHandler'
 
 export interface Building {
   id: number
@@ -22,6 +22,8 @@ export interface BuildingType {
   provides_population: number
   population_required: number
   max_level: number
+  max_count: number | null
+  level_required?: number
 }
 
 export interface CityState {
@@ -68,8 +70,9 @@ export const useCityStore = create<CityState>((set, get) => ({
       if (error) throw error
       setBuildings(data || [])
     } catch (err: any) {
-      setError(err.message)
-      console.error('Error fetching buildings:', err)
+      const errorMessage = err?.message || 'Failed to fetch buildings'
+      setError(errorMessage)
+      handleError(err, errorMessage)
     } finally {
       setLoading(false)
     }
@@ -95,8 +98,9 @@ export const useCityStore = create<CityState>((set, get) => ({
         setBuildingTypes(data || [])
       }
     } catch (err: any) {
-      setError(err.message)
-      console.error('Error fetching building types:', err)
+      const errorMessage = err?.message || 'Failed to fetch building types'
+      setError(errorMessage)
+      handleError(err, errorMessage)
     } finally {
       setLoading(false)
     }
@@ -111,15 +115,16 @@ export const useCityStore = create<CityState>((set, get) => ({
         p_grid_y: gridY
       })
       if (error) throw error
-      toast.success('Building placed!')
+      const { useGameMessageStore } = await import('@/stores/useGameMessageStore')
+      useGameMessageStore.getState().addMessage('success', 'Building placed!')
       await fetchBuildings()
       // Refresh player profile to update population
       const { usePlayerStore } = await import('./usePlayerStore')
       await usePlayerStore.getState().fetchPlayerProfile()
     } catch (err: any) {
-      setError(err.message)
-      toast.error(`Failed to place building: ${err.message}`)
-      console.error('Error placing building:', err)
+      const errorMessage = err?.message || 'Failed to place building'
+      setError(errorMessage)
+      handleError(err, errorMessage)
       throw err
     }
   },
@@ -134,11 +139,12 @@ export const useCityStore = create<CityState>((set, get) => ({
       })
       if (error) throw error
       await fetchBuildings()
-      toast.success('Building moved successfully!')
+      const { useGameMessageStore } = await import('@/stores/useGameMessageStore')
+      useGameMessageStore.getState().addMessage('success', 'Building moved successfully!')
     } catch (err: any) {
-      setError(err.message)
-      toast.error(`Failed to move building: ${err.message}`)
-      console.error('Error moving building:', err)
+      const errorMessage = err?.message || 'Failed to move building'
+      setError(errorMessage)
+      handleError(err, errorMessage)
       throw err
     }
   },
@@ -150,15 +156,16 @@ export const useCityStore = create<CityState>((set, get) => ({
         p_building_id: buildingId
       })
       if (error) throw error
-      toast.success('Building removed!')
+      const { useGameMessageStore } = await import('@/stores/useGameMessageStore')
+      useGameMessageStore.getState().addMessage('success', 'Building removed!')
       await fetchBuildings()
       // Refresh player profile to update population
       const { usePlayerStore } = await import('./usePlayerStore')
       await usePlayerStore.getState().fetchPlayerProfile()
     } catch (err: any) {
-      setError(err.message)
-      toast.error(`Failed to remove building: ${err.message}`)
-      console.error('Error removing building:', err)
+      const errorMessage = err?.message || 'Failed to remove building'
+      setError(errorMessage)
+      handleError(err, errorMessage)
       throw err
     }
   },

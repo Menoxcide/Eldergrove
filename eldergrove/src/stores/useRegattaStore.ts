@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { createClient } from '@/lib/supabase/client'
-import toast from 'react-hot-toast'
 import { usePlayerStore } from './usePlayerStore'
+import { handleError } from '@/hooks/useErrorHandler'
 
 export interface RegattaTask {
   type: string
@@ -102,18 +102,25 @@ export const useRegattaStore = create<RegattaState>((set, get) => ({
       if (error && error.code !== 'PGRST116') throw error // PGRST116 = not found
       
       if (data) {
-        const regatta = {
-          ...data,
-          tasks: typeof data.tasks === 'string' ? JSON.parse(data.tasks) : data.tasks,
-          rewards: typeof data.rewards === 'string' ? JSON.parse(data.rewards) : data.rewards
+        try {
+          const regatta = {
+            ...data,
+            tasks: typeof data.tasks === 'string' ? JSON.parse(data.tasks) : (data.tasks || []),
+            rewards: typeof data.rewards === 'string' ? JSON.parse(data.rewards) : (data.rewards || {})
+          }
+          setCurrentRegatta(regatta)
+        } catch (parseError) {
+          console.error('Error parsing regatta JSON:', parseError, data)
+          setCurrentRegatta(null)
+          throw new Error('Failed to parse regatta data')
         }
-        setCurrentRegatta(regatta)
       } else {
         setCurrentRegatta(null)
       }
-    } catch (err: any) {
-      setError(err.message)
-      console.error('Error fetching current regatta:', err)
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to fetch current regatta'
+      setError(errorMessage)
+      handleError(err, errorMessage)
     } finally {
       setLoading(false)
     }
@@ -139,17 +146,23 @@ export const useRegattaStore = create<RegattaState>((set, get) => ({
       if (error && error.code !== 'PGRST116') throw error
       
       if (data) {
-        const participation = {
-          ...data,
-          tasks_completed: typeof data.tasks_completed === 'string' ? JSON.parse(data.tasks_completed) : data.tasks_completed
+        try {
+          const participation = {
+            ...data,
+            tasks_completed: typeof data.tasks_completed === 'string' ? JSON.parse(data.tasks_completed) : (data.tasks_completed || [])
+          }
+          setParticipation(participation)
+        } catch (parseError) {
+          console.error('Error parsing participation JSON:', parseError, data)
+          setParticipation(null)
         }
-        setParticipation(participation)
       } else {
         setParticipation(null)
       }
     } catch (err: any) {
-      setError(err.message)
-      console.error('Error fetching participation:', err)
+      const errorMessage = err?.message || 'Failed to fetch participation'
+      setError(errorMessage)
+      handleError(err, errorMessage)
     }
   },
   fetchLeaderboard: async (regattaId: number, type: 'global' | 'coven' = 'global') => {
@@ -169,8 +182,9 @@ export const useRegattaStore = create<RegattaState>((set, get) => ({
         setLeaderboard(data || [])
       }
     } catch (err: any) {
-      setError(err.message)
-      console.error('Error fetching leaderboard:', err)
+      const errorMessage = err?.message || 'Failed to fetch leaderboard'
+      setError(errorMessage)
+      handleError(err, errorMessage)
     }
   },
   joinRegatta: async (regattaId: number) => {
@@ -181,13 +195,14 @@ export const useRegattaStore = create<RegattaState>((set, get) => ({
         p_regatta_id: regattaId
       })
       if (error) throw error
-      toast.success('Joined regatta!')
+      const { useGameMessageStore } = await import('@/stores/useGameMessageStore')
+      useGameMessageStore.getState().addMessage('success', 'Joined regatta!')
       await fetchParticipation(regattaId)
       await fetchLeaderboard(regattaId)
     } catch (err: any) {
-      setError(err.message)
-      toast.error(`Failed to join regatta: ${err.message}`)
-      console.error('Error joining regatta:', err)
+      const errorMessage = err?.message || 'Failed to join regatta'
+      setError(errorMessage)
+      handleError(err, errorMessage)
       throw err
     }
   },
@@ -204,14 +219,18 @@ export const useRegattaStore = create<RegattaState>((set, get) => ({
       const result = data as { success: boolean; points_awarded: number; total_points: number }
       
       if (result.success) {
-        toast.success(`Task completed! +${result.points_awarded} points (Total: ${result.total_points})`)
+        const { useGameMessageStore } = await import('@/stores/useGameMessageStore')
+        useGameMessageStore.getState().addMessage(
+          'success',
+          `Task completed! +${result.points_awarded} points (Total: ${result.total_points})`
+        )
         await fetchParticipation(regattaId)
         await fetchLeaderboard(regattaId)
       }
     } catch (err: any) {
-      setError(err.message)
-      toast.error(`Failed to submit task: ${err.message}`)
-      console.error('Error submitting task:', err)
+      const errorMessage = err?.message || 'Failed to submit task'
+      setError(errorMessage)
+      handleError(err, errorMessage)
       throw err
     }
   },
@@ -224,18 +243,25 @@ export const useRegattaStore = create<RegattaState>((set, get) => ({
       })
       if (error) throw error
 
-      const result = data as { success: boolean; rank: number; total_participants: number; crystals_awarded: number }
+      const result = data as { success: boolean; rank: number; total_participants: number; crystals_awarded: number; new_crystal_balance: number }
       
       if (result.success) {
-        const playerStore = usePlayerStore.getState()
-        playerStore.addCrystals(result.crystals_awarded)
+        // Use the returned crystal balance directly to avoid race conditions
+        if (result.new_crystal_balance !== null && result.new_crystal_balance !== undefined) {
+          const playerStore = usePlayerStore.getState()
+          playerStore.setCrystals(result.new_crystal_balance)
+        }
         
-        toast.success(`Rewards claimed! Rank: ${result.rank}/${result.total_participants}, +${result.crystals_awarded} crystals`)
+        const { useGameMessageStore } = await import('@/stores/useGameMessageStore')
+        useGameMessageStore.getState().addMessage(
+          'success',
+          `Rewards claimed! Rank: ${result.rank}/${result.total_participants}, +${result.crystals_awarded} crystals`
+        )
       }
     } catch (err: any) {
-      setError(err.message)
-      toast.error(`Failed to claim rewards: ${err.message}`)
-      console.error('Error claiming rewards:', err)
+      const errorMessage = err?.message || 'Failed to claim rewards'
+      setError(errorMessage)
+      handleError(err, errorMessage)
       throw err
     }
   },
@@ -247,11 +273,23 @@ export const useRegattaStore = create<RegattaState>((set, get) => ({
         'postgres_changes',
         { event: '*', schema: 'public', table: 'regatta_participants', filter: `regatta_id=eq.${regattaId}` },
         () => {
-          get().fetchLeaderboard(regattaId)
-          get().fetchParticipation(regattaId)
+          get().fetchLeaderboard(regattaId).catch((err) => {
+            console.error('Error in subscription callback:', err)
+          })
+          get().fetchParticipation(regattaId).catch((err) => {
+            console.error('Error in subscription callback:', err)
+          })
         }
       )
-      .subscribe()
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          console.log(`Subscribed to regatta ${regattaId} updates`)
+        } else if (status === 'CHANNEL_ERROR') {
+          const { setError } = get()
+          setError('Failed to subscribe to real-time updates')
+          console.error(`Subscription error for regatta ${regattaId}`)
+        }
+      })
 
     return () => {
       supabase.removeChannel(channel)

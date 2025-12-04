@@ -1,0 +1,22 @@
+-- Auth Configuration Notes
+-- ========================
+-- 
+-- This migration documents Auth settings that must be configured via the Supabase Dashboard,
+-- as they cannot be set via SQL migrations.
+--
+-- Leaked Password Protection
+-- ---------------------------
+-- Status: Currently DISABLED (WARN-level security issue)
+-- 
+-- Supabase Auth can prevent the use of compromised passwords by checking against
+-- HaveIBeenPwned.org. This feature enhances security by blocking passwords that have
+-- been exposed in data breaches.
+--
+-- To enable:
+-- 1. Go to Supabase Dashboard → Authentication → Password
+-- 2. Enable "Leaked Password Protection"
+--
+-- Reference: https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection
+--
+-- Note: This is a dashboard-only setting and cannot be configured via SQL migrations.
+

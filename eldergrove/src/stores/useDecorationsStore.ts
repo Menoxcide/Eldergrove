@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { createClient } from '@/lib/supabase/client'
-import toast from 'react-hot-toast'
+import { handleError } from '@/hooks/useErrorHandler'
 
 export interface Decoration {
   id: number
@@ -94,21 +94,27 @@ export const useDecorationsStore = create<DecorationsState>((set, get) => ({
     const { fetchDecorations, setError } = get()
     try {
       const supabase = createClient()
-      const { error } = await supabase.rpc('place_decoration', {
+      const { data, error } = await supabase.rpc('place_decoration', {
         p_decoration_type: decorationType,
         p_grid_x: gridX,
         p_grid_y: gridY
       })
       if (error) throw error
-      toast.success('Decoration placed!')
+      
+      const result = data as { success: boolean; decoration_id: number; new_crystal_balance?: number }
+      
+      // Update crystal balance from returned value
+      if (result.new_crystal_balance !== null && result.new_crystal_balance !== undefined) {
+        const { usePlayerStore } = await import('./usePlayerStore')
+        usePlayerStore.getState().setCrystals(result.new_crystal_balance)
+      }
+      
+      const { useGameMessageStore } = await import('@/stores/useGameMessageStore')
+      useGameMessageStore.getState().addMessage('success', 'Decoration placed!')
       await fetchDecorations()
-      // Refresh player crystals
-      const { usePlayerStore } = await import('./usePlayerStore')
-      await usePlayerStore.getState().fetchPlayerProfile()
     } catch (err: any) {
       setError(err.message)
-      toast.error(`Failed to place decoration: ${err.message}`)
-      console.error('Error placing decoration:', err)
+      handleError(err, err.message)
       throw err
     }
   },
@@ -120,12 +126,12 @@ export const useDecorationsStore = create<DecorationsState>((set, get) => ({
         p_decoration_id: decorationId
       })
       if (error) throw error
-      toast.success('Decoration removed!')
+      const { useGameMessageStore } = await import('@/stores/useGameMessageStore')
+      useGameMessageStore.getState().addMessage('success', 'Decoration removed!')
       await fetchDecorations()
     } catch (err: any) {
       setError(err.message)
-      toast.error(`Failed to remove decoration: ${err.message}`)
-      console.error('Error removing decoration:', err)
+      handleError(err, err.message)
       throw err
     }
   },

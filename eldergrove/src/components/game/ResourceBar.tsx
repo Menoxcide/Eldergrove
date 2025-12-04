@@ -2,6 +2,8 @@
 
 import { usePlayerStore } from '@/stores/usePlayerStore'
 import { Skeleton } from '@/components/ui/LoadingSkeleton'
+import Tooltip from '@/components/ui/Tooltip'
+import { getCrystalsTooltip, getLevelTooltip, getXPTooltip } from '@/lib/tooltipUtils'
 
 const ResourceBar = () => {
   const { crystals, level, xp, loading } = usePlayerStore()
@@ -18,17 +20,23 @@ const ResourceBar = () => {
 
   return (
     <div className="fixed md:relative top-0 left-0 right-0 z-50 flex items-center justify-between gap-4 p-4 md:p-6 bg-gradient-to-r from-indigo-900 via-purple-900 to-slate-900 rounded-none md:rounded-2xl shadow-2xl border-b border-indigo-500/30 md:border md:border-indigo-500/30 backdrop-blur-md text-white font-semibold text-base md:text-lg tracking-wide">
-      <div className="flex items-center space-x-2 px-4 py-2 bg-slate-800/30 hover:bg-slate-700/50 rounded-xl transition-all duration-200 cursor-default">
-        <span className="text-2xl md:text-3xl">💎</span>
-        <span className="font-mono">{crystals.toLocaleString()}</span>
-      </div>
-      <div className="flex items-center space-x-2 px-4 py-2 bg-emerald-800/30 hover:bg-emerald-700/50 rounded-xl transition-all duration-200 cursor-default">
-        <span className="text-xl md:text-2xl">👑</span>
-        <span>Lvl {level}</span>
-      </div>
-      <div className="flex items-center space-x-2 px-4 py-2 bg-amber-800/30 hover:bg-amber-700/50 rounded-xl transition-all duration-200 flex-1 justify-end">
-        <span className="font-mono">{xp.toLocaleString()} XP</span>
-      </div>
+      <Tooltip content={getCrystalsTooltip(crystals, level)} position="bottom">
+        <div className="flex items-center space-x-2 px-4 py-2 bg-slate-800/30 hover:bg-slate-700/50 rounded-xl transition-all duration-200 cursor-default">
+          <span className="text-2xl md:text-3xl">💎</span>
+          <span className="font-mono">{crystals.toLocaleString()}</span>
+        </div>
+      </Tooltip>
+      <Tooltip content={getLevelTooltip(level, xp)} position="bottom">
+        <div className="flex items-center space-x-2 px-4 py-2 bg-emerald-800/30 hover:bg-emerald-700/50 rounded-xl transition-all duration-200 cursor-default">
+          <span className="text-xl md:text-2xl">👑</span>
+          <span>Lvl {level}</span>
+        </div>
+      </Tooltip>
+      <Tooltip content={getXPTooltip(xp, level)} position="bottom">
+        <div className="flex items-center space-x-2 px-4 py-2 bg-amber-800/30 hover:bg-amber-700/50 rounded-xl transition-all duration-200 flex-1 justify-end">
+          <span className="font-mono">{xp.toLocaleString()} XP</span>
+        </div>
+      </Tooltip>
     </div>
   )
 }

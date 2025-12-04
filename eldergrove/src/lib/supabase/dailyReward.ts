@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/client';
-import toast from 'react-hot-toast';
+import { handleError } from '@/hooks/useErrorHandler';
 
 export interface DailyRewardResponse {
   success: boolean;
@@ -45,7 +45,8 @@ export async function claimDailyReward(): Promise<DailyRewardResponse> {
         alreadyClaimed: true
       };
 
-      toast.success(response.message);
+      const { useGameMessageStore } = await import('@/stores/useGameMessageStore');
+      useGameMessageStore.getState().addMessage('success', response.message);
       return response;
     }
 
@@ -81,15 +82,13 @@ export async function claimDailyReward(): Promise<DailyRewardResponse> {
       console.warn('Failed to refresh player profile after daily reward:', profileError);
     }
 
-    toast.success(response.message, {
-      icon: '💎',
-    });
+    const { useGameMessageStore } = await import('@/stores/useGameMessageStore');
+    useGameMessageStore.getState().addMessage('success', response.message);
 
     return response;
   } catch (error) {
-    console.error('Error claiming daily reward:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to claim daily reward';
-    toast.error(errorMessage);
+    handleError(error, errorMessage);
     return {
       success: false,
       message: errorMessage,

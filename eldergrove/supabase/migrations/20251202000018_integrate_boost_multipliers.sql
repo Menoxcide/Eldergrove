@@ -103,7 +103,7 @@ BEGIN
   PERFORM public.check_achievements('produce_count', 1);
   
   -- Update quest progress
-  PERFORM public.update_quest_progress(NULL, 'produce', 1);
+  PERFORM public.update_quest_progress('produce', NULL, 1);
   
   -- Auto-contribute to coven tasks
   PERFORM public.auto_contribute_coven_tasks('produce', 1);
@@ -213,7 +213,7 @@ BEGIN
   WHERE id = p_order_id;
 
   -- Update quest progress for fulfilling orders
-  PERFORM public.update_quest_progress(NULL, 'fulfill_order', 1);
+  PERFORM public.update_quest_progress('fulfill_order', NULL, 1);
 
   -- Return result
   SELECT jsonb_build_object(

@@ -5,6 +5,7 @@ import CropField from '@/components/game/CropField';
 import { useFarmStore } from '@/stores/useFarmStore';
 import { usePlayerStore } from '@/stores/usePlayerStore';
 import { getItemIcon } from '@/lib/itemUtils';
+import { createClient } from '@/lib/supabase/client';
 
 export default function FarmPage() {
   const { plots, seedShop, loading, fetchPlots, fetchSeedShop, buySeed } = useFarmStore();
@@ -14,6 +15,26 @@ export default function FarmPage() {
   useEffect(() => {
     fetchPlots();
     fetchSeedShop();
+
+    const supabase = createClient();
+    const channel = supabase.channel('farm_plots_realtime');
+    channel
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'farm_plots',
+        },
+        () => {
+          fetchPlots();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [fetchPlots, fetchSeedShop]);
 
   if (loading) {

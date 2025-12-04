@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { createClient } from '@/lib/supabase/client'
-import toast from 'react-hot-toast'
 import { usePlayerStore } from './usePlayerStore'
+import { handleError } from '@/hooks/useErrorHandler'
 
 export interface Achievement {
   id: number
@@ -117,20 +117,25 @@ export const useAchievementStore = create<AchievementState>((set, get) => ({
       })
       if (error) throw error
 
-      const result = data as { success: boolean; crystals_awarded: number; xp_awarded: number; title: string | null }
+      const result = data as { success: boolean; crystals_awarded: number; xp_awarded: number; title: string | null; new_crystal_balance: number }
       
       if (result.success) {
-        // Update player store
-        const playerStore = usePlayerStore.getState()
-        playerStore.addCrystals(result.crystals_awarded)
+        // Use the returned crystal balance directly to avoid race conditions
+        if (result.new_crystal_balance !== null && result.new_crystal_balance !== undefined) {
+          const playerStore = usePlayerStore.getState()
+          playerStore.setCrystals(result.new_crystal_balance)
+        }
         
-        toast.success(`Achievement claimed! +${result.crystals_awarded} crystals, +${result.xp_awarded} XP${result.title ? `, Title: ${result.title}` : ''}`)
+        const { useGameMessageStore } = await import('@/stores/useGameMessageStore')
+        useGameMessageStore.getState().addMessage(
+          'success',
+          `Achievement claimed! +${result.crystals_awarded} crystals, +${result.xp_awarded} XP${result.title ? `, Title: ${result.title}` : ''}`
+        )
         await fetchPlayerAchievements()
       }
     } catch (err: any) {
       setError(err.message)
-      toast.error(`Failed to claim achievement: ${err.message}`)
-      console.error('Error claiming achievement:', err)
+      handleError(err, err.message)
       throw err
     }
   },

@@ -1,11 +1,13 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useInventoryStore, getItemName } from '@/stores/useInventoryStore'
+import { useInventoryStore } from '@/stores/useInventoryStore'
 import { getItemIcon } from '@/lib/itemUtils'
 import { usePlayerStore } from '@/stores/usePlayerStore'
 import { Skeleton } from '@/components/ui/LoadingSkeleton'
 import { createClient } from '@/lib/supabase/client'
+import Tooltip from '@/components/ui/Tooltip'
+import { getItemTooltip } from '@/lib/tooltipUtils'
 
 const InventoryBar = () => {
   const { inventory, storageUsage, loading, error, fetchInventory, fetchStorageUsage, upgradeWarehouse, subscribeToInventoryUpdates } = useInventoryStore()
@@ -123,14 +125,16 @@ const InventoryBar = () => {
         {/* Inventory Items */}
         <div className="flex items-center flex-wrap gap-3 overflow-x-auto scrollbar-thin scrollbar-thumb-slate-600 scrollbar-track-slate-900/50">
           {inventory.map((item) => (
-            <div
+            <Tooltip
               key={item.item_id}
-              className="flex items-center space-x-2 min-w-fit px-3 py-2 bg-slate-800/40 hover:bg-slate-700/60 rounded-xl transition-all duration-200 text-sm md:text-base font-mono whitespace-nowrap border border-slate-700/50"
-              title={getItemName(item.item_id)}
+              content={getItemTooltip(item.item_id, item.quantity, storageUsage || undefined)}
+              position="bottom"
             >
-              <span className="text-xl md:text-2xl flex-shrink-0">{getItemIcon(item.item_id)}</span>
-              <span>{item.quantity.toLocaleString()}</span>
-            </div>
+              <div className="flex items-center space-x-2 min-w-fit px-3 py-2 bg-slate-800/40 hover:bg-slate-700/60 rounded-xl transition-all duration-200 text-sm md:text-base font-mono whitespace-nowrap border border-slate-700/50 cursor-default">
+                <span className="text-xl md:text-2xl flex-shrink-0">{getItemIcon(item.item_id)}</span>
+                <span>{item.quantity.toLocaleString()}</span>
+              </div>
+            </Tooltip>
           ))}
           {inventory.length === 0 && (
             <div className="px-4 py-2 text-slate-400 italic text-sm md:text-base">No items in inventory</div>

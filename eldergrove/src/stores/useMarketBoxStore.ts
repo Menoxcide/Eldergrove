@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { createClient } from '@/lib/supabase/client'
-import toast from 'react-hot-toast'
+import { handleError } from '@/hooks/useErrorHandler'
 
 export interface MarketListing {
   id: number
@@ -63,8 +63,9 @@ export const useMarketBoxStore = create<MarketBoxState>((set, get) => ({
       if (error) throw error
       setListings(data || [])
     } catch (err: any) {
-      setError(err.message)
-      console.error('Error fetching listings:', err)
+      const errorMessage = err?.message || 'Failed to fetch listings'
+      setError(errorMessage)
+      handleError(err, errorMessage)
     } finally {
       setLoading(false)
     }
@@ -88,8 +89,9 @@ export const useMarketBoxStore = create<MarketBoxState>((set, get) => ({
       if (error) throw error
       setMyListings(data || [])
     } catch (err: any) {
-      setError(err.message)
-      console.error('Error fetching my listings:', err)
+      const errorMessage = err?.message || 'Failed to fetch my listings'
+      setError(errorMessage)
+      handleError(err, errorMessage)
     } finally {
       setLoading(false)
     }
@@ -105,16 +107,17 @@ export const useMarketBoxStore = create<MarketBoxState>((set, get) => ({
         p_expires_hours: expiresHours
       })
       if (error) throw error
-      toast.success('Listing created!')
+      const { useGameMessageStore } = await import('@/stores/useGameMessageStore')
+      useGameMessageStore.getState().addMessage('success', 'Listing created!')
       await fetchMyListings()
       await fetchListings()
       // Refresh inventory
       const { useInventoryStore } = await import('./useInventoryStore')
       useInventoryStore.getState().fetchInventory()
     } catch (err: any) {
-      setError(err.message)
-      toast.error(`Failed to create listing: ${err.message}`)
-      console.error('Error creating listing:', err)
+      const errorMessage = err?.message || 'Failed to create listing'
+      setError(errorMessage)
+      handleError(err, errorMessage)
       throw err
     }
   },
@@ -130,7 +133,11 @@ export const useMarketBoxStore = create<MarketBoxState>((set, get) => ({
       const result = data as { success: boolean; item_id: number; quantity: number; cost: number }
       
       if (result.success) {
-        toast.success(`Purchased ${result.quantity} items for ${result.cost} crystals!`)
+        const { useGameMessageStore } = await import('@/stores/useGameMessageStore')
+        useGameMessageStore.getState().addMessage(
+          'success',
+          `Purchased ${result.quantity} items for ${result.cost} crystals!`
+        )
         await fetchListings()
         // Refresh inventory and crystals
         const { useInventoryStore } = await import('./useInventoryStore')
@@ -139,9 +146,9 @@ export const useMarketBoxStore = create<MarketBoxState>((set, get) => ({
         usePlayerStore.getState().fetchPlayerProfile()
       }
     } catch (err: any) {
-      setError(err.message)
-      toast.error(`Failed to purchase listing: ${err.message}`)
-      console.error('Error purchasing listing:', err)
+      const errorMessage = err?.message || 'Failed to purchase listing'
+      setError(errorMessage)
+      handleError(err, errorMessage)
       throw err
     }
   },
@@ -153,16 +160,17 @@ export const useMarketBoxStore = create<MarketBoxState>((set, get) => ({
         p_listing_id: listingId
       })
       if (error) throw error
-      toast.success('Listing cancelled! Items returned to inventory.')
+      const { useGameMessageStore } = await import('@/stores/useGameMessageStore')
+      useGameMessageStore.getState().addMessage('success', 'Listing cancelled! Items returned to inventory.')
       await fetchMyListings()
       await fetchListings()
       // Refresh inventory
       const { useInventoryStore } = await import('./useInventoryStore')
       useInventoryStore.getState().fetchInventory()
     } catch (err: any) {
-      setError(err.message)
-      toast.error(`Failed to cancel listing: ${err.message}`)
-      console.error('Error cancelling listing:', err)
+      const errorMessage = err?.message || 'Failed to cancel listing'
+      setError(errorMessage)
+      handleError(err, errorMessage)
       throw err
     }
   },
@@ -174,11 +182,23 @@ export const useMarketBoxStore = create<MarketBoxState>((set, get) => ({
         'postgres_changes',
         { event: '*', schema: 'public', table: 'market_listings' },
         () => {
-          get().fetchListings()
-          get().fetchMyListings()
+          get().fetchListings().catch((err) => {
+            console.error('Error in subscription callback:', err)
+          })
+          get().fetchMyListings().catch((err) => {
+            console.error('Error in subscription callback:', err)
+          })
         }
       )
-      .subscribe()
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          console.log('Subscribed to market box updates')
+        } else if (status === 'CHANNEL_ERROR') {
+          const { setError } = get()
+          setError('Failed to subscribe to real-time updates')
+          console.error('Subscription error for market box')
+        }
+      })
 
     return () => {
       supabase.removeChannel(channel)

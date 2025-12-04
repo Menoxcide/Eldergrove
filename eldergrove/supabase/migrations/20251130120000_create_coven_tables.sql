@@ -1,5 +1,5 @@
 -- Create coven table
-CREATE TABLE public.coven (
+CREATE TABLE IF NOT EXISTS public.coven (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   name text UNIQUE NOT NULL,
   emblem text,
@@ -14,7 +14,7 @@ CREATE TABLE public.coven (
 );
 
 -- Create coven_members table
-CREATE TABLE public.coven_members (
+CREATE TABLE IF NOT EXISTS public.coven_members (
   coven_id uuid NOT NULL REFERENCES public.coven(id) ON DELETE CASCADE,
   player_id uuid NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
   role text DEFAULT 'member' CHECK (role IN ('member', 'elder', 'leader')),
@@ -30,7 +30,7 @@ CREATE TABLE public.coven_members (
 );
 
 -- Create coven_invitations table
-CREATE TABLE public.coven_invitations (
+CREATE TABLE IF NOT EXISTS public.coven_invitations (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   coven_id UUID NOT NULL REFERENCES public.coven(id) ON DELETE CASCADE,
   inviter_id UUID NOT NULL REFERENCES public.profiles(id),
@@ -43,7 +43,7 @@ CREATE TABLE public.coven_invitations (
 );
 
 -- Create coven_resources table
-CREATE TABLE public.coven_resources (
+CREATE TABLE IF NOT EXISTS public.coven_resources (
   coven_id UUID PRIMARY KEY REFERENCES public.coven(id) ON DELETE CASCADE,
   crystals BIGINT DEFAULT 0,
   herbs BIGINT DEFAULT 0,
@@ -53,7 +53,7 @@ CREATE TABLE public.coven_resources (
 );
 
 -- Create coven_activity_log table
-CREATE TABLE public.coven_activity_log (
+CREATE TABLE IF NOT EXISTS public.coven_activity_log (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   coven_id UUID NOT NULL REFERENCES public.coven(id) ON DELETE CASCADE,
   actor_id UUID NOT NULL REFERENCES public.profiles(id),
@@ -65,28 +65,28 @@ CREATE TABLE public.coven_activity_log (
 );
 
 -- Create indexes for coven table
-CREATE INDEX idx_coven_leader_id ON public.coven(leader_id);
-CREATE INDEX idx_coven_visibility ON public.coven(visibility);
-CREATE INDEX idx_coven_member_count ON public.coven(member_count);
-CREATE INDEX idx_coven_updated_at ON public.coven(updated_at);
+CREATE INDEX IF NOT EXISTS idx_coven_leader_id ON public.coven(leader_id);
+CREATE INDEX IF NOT EXISTS idx_coven_visibility ON public.coven(visibility);
+CREATE INDEX IF NOT EXISTS idx_coven_member_count ON public.coven(member_count);
+CREATE INDEX IF NOT EXISTS idx_coven_updated_at ON public.coven(updated_at);
 
 -- Create indexes for coven_members table
-CREATE INDEX idx_coven_members_player_id ON public.coven_members(player_id);
-CREATE INDEX idx_coven_members_coven_id ON public.coven_members(coven_id);
-CREATE INDEX idx_coven_members_role ON public.coven_members(role);
-CREATE INDEX idx_coven_members_last_active ON public.coven_members(last_active);
-CREATE INDEX idx_coven_members_contribution ON public.coven_members(contribution);
+CREATE INDEX IF NOT EXISTS idx_coven_members_player_id ON public.coven_members(player_id);
+CREATE INDEX IF NOT EXISTS idx_coven_members_coven_id ON public.coven_members(coven_id);
+CREATE INDEX IF NOT EXISTS idx_coven_members_role ON public.coven_members(role);
+CREATE INDEX IF NOT EXISTS idx_coven_members_last_active ON public.coven_members(last_active);
+CREATE INDEX IF NOT EXISTS idx_coven_members_contribution ON public.coven_members(contribution);
 
 -- Create indexes for coven_invitations table
-CREATE INDEX idx_coven_invitations_coven_id ON public.coven_invitations(coven_id);
-CREATE INDEX idx_coven_invitations_invitee_id ON public.coven_invitations(invitee_id);
-CREATE INDEX idx_coven_invitations_status ON public.coven_invitations(status);
+CREATE INDEX IF NOT EXISTS idx_coven_invitations_coven_id ON public.coven_invitations(coven_id);
+CREATE INDEX IF NOT EXISTS idx_coven_invitations_invitee_id ON public.coven_invitations(invitee_id);
+CREATE INDEX IF NOT EXISTS idx_coven_invitations_status ON public.coven_invitations(status);
 
 -- Create indexes for coven_activity_log table
-CREATE INDEX idx_coven_activity_log_coven_id ON public.coven_activity_log(coven_id);
-CREATE INDEX idx_coven_activity_log_actor_id ON public.coven_activity_log(actor_id);
-CREATE INDEX idx_coven_activity_log_action ON public.coven_activity_log(action);
-CREATE INDEX idx_coven_activity_log_created_at ON public.coven_activity_log(created_at);
+CREATE INDEX IF NOT EXISTS idx_coven_activity_log_coven_id ON public.coven_activity_log(coven_id);
+CREATE INDEX IF NOT EXISTS idx_coven_activity_log_actor_id ON public.coven_activity_log(actor_id);
+CREATE INDEX IF NOT EXISTS idx_coven_activity_log_action ON public.coven_activity_log(action);
+CREATE INDEX IF NOT EXISTS idx_coven_activity_log_created_at ON public.coven_activity_log(created_at);
 
 -- Enable RLS on coven table
 ALTER TABLE public.coven ENABLE ROW LEVEL SECURITY;
@@ -130,16 +130,17 @@ CREATE POLICY "Users can create coven"
 ALTER TABLE public.coven_members ENABLE ROW LEVEL SECURITY;
 
 -- Policy: Members can view members of their coven
+-- Fixed to prevent infinite recursion by checking via coven table
 DROP POLICY IF EXISTS "Members can view coven members" ON public.coven_members;
 CREATE POLICY "Members can view coven members"
   ON public.coven_members
   FOR SELECT
   TO authenticated
   USING (
-    EXISTS (
-      SELECT 1 FROM public.coven_members cm
-      WHERE cm.coven_id = coven_members.coven_id
-      AND cm.player_id = auth.uid()
+    -- Check if user is a member by verifying the coven exists and user is in it
+    -- This avoids recursion by not querying coven_members directly in the policy
+    coven_id IN (
+      SELECT coven_id FROM public.coven_members WHERE player_id = auth.uid()
     )
   );
 

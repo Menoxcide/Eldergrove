@@ -6,13 +6,14 @@ import { createClient } from '@/lib/supabase/client';
 import { usePlayerStore } from '@/stores/usePlayerStore';
 import { useCovenStore } from '@/stores/useCovenStore';
 import { Skeleton } from '@/components/ui/LoadingSkeleton';
-import toast from 'react-hot-toast';
+import { useErrorHandler } from '@/hooks/useErrorHandler';
 
 export default function ProfilePage() {
   const router = useRouter();
   const { id, username, crystals, level, xp, aether, loading: playerLoading } = usePlayerStore();
   const { currentCoven, fetchCoven, loading: covenLoading } = useCovenStore();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const { handleError } = useErrorHandler();
 
   useEffect(() => {
     fetchCoven();
@@ -24,13 +25,14 @@ export default function ProfilePage() {
       const supabase = createClient();
       const { error } = await supabase.auth.signOut();
       if (error) {
-        toast.error(`Failed to logout: ${error.message}`);
+        handleError(error, error.message);
       } else {
-        toast.success('Logged out successfully');
+        const { useGameMessageStore } = await import('@/stores/useGameMessageStore');
+        useGameMessageStore.getState().addMessage('success', 'Logged out successfully');
         router.push('/login');
       }
     } catch (err: any) {
-      toast.error(`Failed to logout: ${err.message}`);
+      handleError(err, err.message);
     } finally {
       setIsLoggingOut(false);
     }
@@ -54,6 +56,19 @@ export default function ProfilePage() {
   // Calculate XP needed for next level (simple formula: level * 1000)
   const xpForNextLevel = level * 1000;
   const xpProgress = (xp / xpForNextLevel) * 100;
+
+  // Calculate level-based benefits
+  const storageBonus = level * 5; // +5 storage per level
+  const energyBonus = level * 2; // +2 energy per level
+  const productionBonus = Math.min(level, 50) * 1; // 1% per level, max 50%
+  const discountPercent = Math.min(level * 0.5, 25); // 0.5% per level, max 25%
+
+  // Next level benefits
+  const nextLevel = level + 1;
+  const nextStorageBonus = nextLevel * 5;
+  const nextEnergyBonus = nextLevel * 2;
+  const nextProductionBonus = Math.min(nextLevel, 50) * 1;
+  const nextDiscountPercent = Math.min(nextLevel * 0.5, 25);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-900 via-indigo-900 to-purple-900 p-4 pb-24">
@@ -142,6 +157,45 @@ export default function ProfilePage() {
               </button>
             </div>
           )}
+        </div>
+
+        {/* Level Benefits Card */}
+        <div className="bg-white/10 backdrop-blur-md rounded-2xl p-6 mb-6 border border-white/20">
+          <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+            <span>⭐</span>
+            Level Benefits
+          </h3>
+          <div className="grid grid-cols-2 gap-4 mb-4">
+            <div className="bg-white/5 rounded-lg p-4">
+              <p className="text-slate-400 text-sm mb-1">Storage Bonus</p>
+              <p className="text-2xl font-bold text-emerald-400">+{storageBonus}</p>
+              <p className="text-xs text-slate-400 mt-1">Next: +{nextStorageBonus}</p>
+            </div>
+            <div className="bg-white/5 rounded-lg p-4">
+              <p className="text-slate-400 text-sm mb-1">Energy Bonus</p>
+              <p className="text-2xl font-bold text-blue-400">+{energyBonus}</p>
+              <p className="text-xs text-slate-400 mt-1">Next: +{nextEnergyBonus}</p>
+            </div>
+            <div className="bg-white/5 rounded-lg p-4">
+              <p className="text-slate-400 text-sm mb-1">Production Speed</p>
+              <p className="text-2xl font-bold text-purple-400">+{productionBonus}%</p>
+              <p className="text-xs text-slate-400 mt-1">Next: +{nextProductionBonus}%</p>
+            </div>
+            <div className="bg-white/5 rounded-lg p-4">
+              <p className="text-slate-400 text-sm mb-1">Purchase Discount</p>
+              <p className="text-2xl font-bold text-amber-400">{discountPercent.toFixed(1)}%</p>
+              <p className="text-xs text-slate-400 mt-1">Next: {nextDiscountPercent.toFixed(1)}%</p>
+            </div>
+          </div>
+          <div className="text-xs text-slate-400 bg-white/5 rounded-lg p-3">
+            <p className="font-semibold text-slate-300 mb-1">How Level Benefits Work:</p>
+            <ul className="list-disc list-inside space-y-1">
+              <li>Storage: +5 capacity per level</li>
+              <li>Energy: +2 max energy per level</li>
+              <li>Production: +1% speed per level (max 50%)</li>
+              <li>Discount: +0.5% per level (max 25%)</li>
+            </ul>
+          </div>
         </div>
 
         {/* Stats Card */}

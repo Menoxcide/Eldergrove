@@ -3,11 +3,15 @@
 import React, { useState, useEffect } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useFarmStore, type FarmState, type Crop } from '@/stores/useFarmStore';
+import { useInventoryStore } from '@/stores/useInventoryStore';
 import { useOfflineQueue } from '@/hooks/useOfflineQueue';
 import { useSpeedUpsStore } from '@/stores/useSpeedUpsStore';
 import { usePremiumShopStore } from '@/stores/usePremiumShopStore';
-import { getItemIcon } from '@/lib/itemUtils';
-import toast from 'react-hot-toast';
+import { useAdSpeedUp } from '@/hooks/useAdSpeedUp';
+import { getItemIcon, getSeedItemId } from '@/lib/itemUtils';
+import { useErrorHandler } from '@/hooks/useErrorHandler';
+import Tooltip from '@/components/ui/Tooltip';
+import { getCropTooltip, getActionTooltip } from '@/lib/tooltipUtils';
 
 interface FarmPlot {
   player_id: string;
@@ -27,20 +31,30 @@ const CropField: React.FC<CropFieldProps> = ({ plot }) => {
   const harvestCrop = useFarmStore((state: FarmState) => state.harvestCrop);
   const crops = useFarmStore((state: FarmState) => state.crops);
   const fetchCrops = useFarmStore((state: FarmState) => state.fetchCrops);
+  const inventory = useInventoryStore((state) => state.inventory);
+  const fetchInventory = useInventoryStore((state) => state.fetchInventory);
   const { queueAction } = useOfflineQueue();
   const { applyCropSpeedUp } = useSpeedUpsStore();
   const { items: premiumItems, purchaseItem } = usePremiumShopStore();
+  const { watchAdForSpeedUp, canWatchAd, adsRemaining, loading: adLoading } = useAdSpeedUp();
   const [timeLeft, setTimeLeft] = useState(0);
   const [hasAutoHarvested, setHasAutoHarvested] = useState(false);
   const [showCropSelection, setShowCropSelection] = useState(false);
   const [showSpeedUpModal, setShowSpeedUpModal] = useState(false);
   const [currentCrop, setCurrentCrop] = useState<Crop | null>(null);
+  const { showError } = useErrorHandler();
 
   useEffect(() => {
     if (crops.length === 0) {
       fetchCrops();
     }
   }, [crops.length, fetchCrops]);
+
+  useEffect(() => {
+    if (showCropSelection) {
+      fetchInventory();
+    }
+  }, [showCropSelection, fetchInventory]);
 
   useEffect(() => {
     if (crop_id && crops.length > 0) {
@@ -69,31 +83,25 @@ const CropField: React.FC<CropFieldProps> = ({ plot }) => {
   }, [ready_at]);
 
   useEffect(() => {
-    // Only auto-harvest when crop is actually ready (current time >= ready_at) and we haven't harvested it yet
     const isReady = !!crop_id && !!ready_at && new Date() >= new Date(ready_at) && !hasAutoHarvested;
 
     if (isReady) {
       setHasAutoHarvested(true);
       const autoHarvest = async () => {
         try {
-          console.log(`Auto-harvesting plot ${plot.plot_index}`);
-          await queueAction('harvest_plot', { p_plot_index: plot.plot_index });
-          // Note: fetchPlots() removed - harvestCrop now handles local state update
+          await harvestCrop(plot.plot_index);
         } catch (error) {
-          console.error('Auto-harvest failed:', error);
-          // Reset flag if harvest fails so it can retry
           setHasAutoHarvested(false);
         }
       };
 
-      autoHarvest();
+      const timeoutId = setTimeout(autoHarvest, 100);
+      return () => clearTimeout(timeoutId);
     }
-  }, [crop_id, ready_at, hasAutoHarvested, queueAction, plot.plot_index]);
+  }, [crop_id, ready_at, hasAutoHarvested, harvestCrop, plot.plot_index]);
 
-  // Reset auto-harvest flag when a new crop is planted
   useEffect(() => {
     if (crop_id && !hasAutoHarvested) {
-      // Reset flag when a new crop is planted
       setHasAutoHarvested(false);
     }
   }, [crop_id, hasAutoHarvested]);
@@ -107,8 +115,25 @@ const CropField: React.FC<CropFieldProps> = ({ plot }) => {
 
   const handlePlantCrop = async (cropId: number) => {
     try {
+      // Check if player has seeds before planting
+      const crop = crops.find(c => c.id === cropId);
+      if (!crop) {
+        showError('Crop Not Found', 'The selected crop could not be found.');
+        return;
+      }
+      
+      const seedItemId = getSeedItemId(crop.item_id);
+      const seedItem = inventory.find(item => item.item_id === seedItemId);
+      const seedCount = seedItem?.quantity || 0;
+      
+      if (seedCount < 1) {
+        showError('No Seeds Available', `You don't have any seeds to plant ${crop.name}.`, { seedItemId, itemId: crop.item_id, itemName: crop.name }, `Purchase seeds from the seed shop to plant ${crop.name}.`);
+        return;
+      }
+      
       await queueAction('plant_crop', { p_plot_index: plot.plot_index, p_crop_id: cropId });
       await fetchPlots();
+      await fetchInventory(); // Refresh inventory to update seed count
       setShowCropSelection(false);
     } catch (error) {
       console.error('Failed to plant crop:', error);
@@ -134,12 +159,21 @@ const CropField: React.FC<CropFieldProps> = ({ plot }) => {
     }
   };
 
+  const handleWatchAd = async () => {
+    try {
+      await watchAdForSpeedUp('farm', plot.plot_index);
+      await fetchPlots(); // Refresh plots to show updated timer
+    } catch (error) {
+      // Error handled in hook
+    }
+  };
+
   const handleHarvest = async () => {
     if (!isReady) return;
     try {
       setHasAutoHarvested(true); // Prevent auto-harvest from triggering
       await harvestCrop(plot.plot_index);
-      await fetchPlots();
+      // Note: fetchPlots() is already called inside harvestCrop, no need to call it again
     } catch (error) {
       console.error('Failed to harvest crop:', error);
       setHasAutoHarvested(false); // Reset on error so it can retry
@@ -151,14 +185,54 @@ const CropField: React.FC<CropFieldProps> = ({ plot }) => {
   const isReady = !!crop_id && !!ready_at && new Date() >= new Date(ready_at);
   const speedUpItems = premiumItems.filter(item => item.item_type === 'speed_up');
 
+  const getPlotTooltipContent = () => {
+    if (isEmpty) {
+      return [
+        {
+          title: 'Empty Plot',
+          icon: '🌱',
+          color: 'gray' as const,
+          content: (
+            <div className="space-y-1 text-xs">
+              <p>Click to plant a crop</p>
+              <p>• Requires seeds in inventory</p>
+              <p>• Each crop has different grow times</p>
+              <p>• Harvest when ready to earn rewards</p>
+            </div>
+          ),
+        },
+      ];
+    } else if (isReady && currentCrop) {
+      return getCropTooltip(currentCrop);
+    } else if (isGrowing && currentCrop) {
+      const sections = getCropTooltip(currentCrop);
+      sections.push({
+        title: 'Growing',
+        icon: '⏳',
+        color: 'yellow' as const,
+        content: (
+          <div className="space-y-1 text-xs">
+            <p>Time remaining: {formatTime(timeLeft)}</p>
+            <p>• Use speed-ups to finish faster</p>
+            <p>• Watch ads for free 30-min speed-up</p>
+            <p>• Click when ready to harvest</p>
+          </div>
+        ),
+      });
+      return sections;
+    }
+    return [];
+  };
+
   return (
     <>
-      <div 
-        className={`relative w-24 h-24 border-4 border-gray-300 rounded-2xl shadow-xl bg-gradient-to-br from-amber-200 via-yellow-300 to-orange-300 transition-all duration-200 group ${
-          isReady ? 'cursor-pointer hover:scale-105' : isGrowing ? 'cursor-default' : 'cursor-pointer hover:scale-105'
-        }`}
-        onClick={isReady ? handleHarvest : undefined}
-      >
+      <Tooltip content={getPlotTooltipContent()} position="top">
+        <div 
+          className={`relative w-24 h-24 border-4 border-gray-300 rounded-2xl shadow-xl bg-gradient-to-br from-amber-200 via-yellow-300 to-orange-300 transition-all duration-200 group ${
+            isReady ? 'cursor-pointer hover:scale-105' : isGrowing ? 'cursor-default' : 'cursor-pointer hover:scale-105'
+          }`}
+          onClick={isReady ? handleHarvest : undefined}
+        >
         {isEmpty ? (
           <button
             className="absolute inset-0 rounded-2xl flex flex-col items-center justify-center bg-gradient-to-br from-emerald-500 to-green-600 text-white font-bold text-xs hover:from-emerald-400 hover:to-green-500 transition-all px-1 py-1 border border-white/20"
@@ -181,16 +255,33 @@ const CropField: React.FC<CropFieldProps> = ({ plot }) => {
               <div className="absolute -bottom-3 left-1/2 transform -translate-x-1/2 bg-black/80 backdrop-blur-sm text-white text-xs font-mono px-2 py-1 rounded-full shadow-lg border border-white/30 whitespace-nowrap">
                 {formatTime(timeLeft)}
               </div>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setShowSpeedUpModal(true);
-                }}
-                className="absolute top-1 right-1 bg-purple-600 hover:bg-purple-700 text-white text-xs px-2 py-1 rounded-full transition-colors shadow-lg"
-                title="Speed Up Growth"
-              >
-                ⏩
-              </button>
+              <div className="absolute top-1 right-1 flex flex-col gap-1">
+                <Tooltip content={getActionTooltip('Speed Up Growth', undefined, ['Use speed-up items', 'Reduce grow time by item minutes', 'Available in premium shop'])} position="left">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShowSpeedUpModal(true);
+                    }}
+                    className="bg-purple-600 hover:bg-purple-700 text-white text-xs px-2 py-1 rounded-full transition-colors shadow-lg"
+                  >
+                    ⏩
+                  </button>
+                </Tooltip>
+                {canWatchAd && (
+                  <Tooltip content={getActionTooltip(`Watch Ad (${adsRemaining} remaining)`, undefined, ['Free 30-minute speed-up', `${adsRemaining} ads remaining today`, 'No cost required'])} position="left">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleWatchAd();
+                      }}
+                      disabled={adLoading}
+                      className="bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white text-xs px-2 py-1 rounded-full transition-colors shadow-lg"
+                    >
+                      📺
+                    </button>
+                  </Tooltip>
+                )}
+              </div>
             </>
           )}
           {isReady && (
@@ -200,24 +291,44 @@ const CropField: React.FC<CropFieldProps> = ({ plot }) => {
           )}
         </>
       )}
-    </div>
+      </div>
+    </Tooltip>
 
     {showCropSelection && (
       <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowCropSelection(false)}>
         <div className="bg-gradient-to-br from-green-900 to-emerald-900 rounded-2xl p-6 max-w-md w-full mx-4 border-2 border-green-500/50" onClick={(e) => e.stopPropagation()}>
           <h3 className="text-2xl font-bold text-white mb-4">Select Crop to Plant</h3>
           <div className="grid grid-cols-2 gap-3 max-h-96 overflow-y-auto">
-            {crops.map((crop) => (
-              <button
-                key={crop.id}
-                onClick={() => handlePlantCrop(crop.id)}
-                className="bg-slate-800/60 hover:bg-slate-700/60 rounded-xl p-4 border border-slate-700/50 transition-all flex flex-col items-center gap-2"
-              >
-                <span className="text-4xl">{getItemIcon(crop.item_id)}</span>
-                <span className="text-white font-semibold text-sm">{crop.name}</span>
-                <span className="text-yellow-400 text-xs">{crop.grow_minutes} min</span>
-              </button>
-            ))}
+            {crops.map((crop) => {
+              // Seeds use item_id 100-110, crops use item_id 1-10
+              const seedItemId = getSeedItemId(crop.item_id);
+              const seedItem = inventory.find(item => item.item_id === seedItemId);
+              const seedCount = seedItem?.quantity || 0;
+              const hasSeeds = seedCount > 0;
+              return (
+                <Tooltip key={crop.id} content={getCropTooltip(crop, seedCount)} position="top">
+                  <button
+                    onClick={() => hasSeeds && handlePlantCrop(crop.id)}
+                    disabled={!hasSeeds}
+                    className={`rounded-xl p-4 border transition-all flex flex-col items-center gap-2 ${
+                      hasSeeds
+                        ? 'bg-slate-800/60 hover:bg-slate-700/60 border-slate-700/50 cursor-pointer'
+                        : 'bg-slate-900/60 border-slate-800/50 cursor-not-allowed opacity-60'
+                    }`}
+                  >
+                    <span className="text-4xl">{getItemIcon(crop.item_id)}</span>
+                    <span className="text-white font-semibold text-sm">{crop.name}</span>
+                    <span className="text-yellow-400 text-xs">{crop.grow_minutes} min</span>
+                    <span className={`text-xs font-medium ${hasSeeds ? 'text-green-400' : 'text-red-400'}`}>
+                      Seeds: {seedCount}
+                    </span>
+                    {!hasSeeds && (
+                      <span className="text-red-400 text-xs font-medium">No seeds available</span>
+                    )}
+                  </button>
+                </Tooltip>
+              );
+            })}
           </div>
           <button
             onClick={() => setShowCropSelection(false)}
@@ -236,6 +347,31 @@ const CropField: React.FC<CropFieldProps> = ({ plot }) => {
           <h3 className="text-2xl font-bold text-white mb-4">Speed Up Crop Growth</h3>
           <p className="text-slate-300 mb-4">Time remaining: {formatTime(timeLeft)}</p>
           
+          {/* Watch Ad Option */}
+          {canWatchAd && (
+            <button
+              onClick={async () => {
+                try {
+                  await handleWatchAd();
+                  setShowSpeedUpModal(false);
+                } catch (error) {
+                  // Error handled in hook
+                }
+              }}
+              disabled={adLoading}
+              className="w-full flex items-center justify-between p-3 bg-green-700/60 hover:bg-green-600 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg transition-colors mb-4"
+            >
+              <div className="flex items-center gap-3">
+                <span className="text-2xl">📺</span>
+                <div className="text-left">
+                  <div className="text-white font-semibold">Watch Ad</div>
+                  <div className="text-green-300 text-sm">-30 minutes (Free)</div>
+                </div>
+              </div>
+              <div className="text-green-400 font-bold">{adsRemaining} remaining</div>
+            </button>
+          )}
+
           <div className="space-y-2 mb-4">
             {speedUpItems.map((item) => {
               const minutes = item.metadata?.minutes || 60;

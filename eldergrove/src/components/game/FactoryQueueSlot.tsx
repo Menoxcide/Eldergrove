@@ -5,8 +5,11 @@ import type { FactoryQueueItem } from '@/stores/useFactoryStore';
 import { useOfflineQueue } from '@/hooks/useOfflineQueue';
 import { useSpeedUpsStore } from '@/stores/useSpeedUpsStore';
 import { usePremiumShopStore } from '@/stores/usePremiumShopStore';
+import { useAdSpeedUp } from '@/hooks/useAdSpeedUp';
+import { useFactoryStore } from '@/stores/useFactoryStore';
 import { createClient } from '@/lib/supabase/client';
-import toast from 'react-hot-toast';
+import Tooltip from '@/components/ui/Tooltip';
+import { getActionTooltip } from '@/lib/tooltipUtils';
 
 interface FactoryQueueSlotProps {
   queueItem: FactoryQueueItem;
@@ -20,6 +23,8 @@ const FactoryQueueSlot: React.FC<FactoryQueueSlotProps> = ({ queueItem }) => {
   const { queueAction } = useOfflineQueue();
   const { applyFactorySpeedUp } = useSpeedUpsStore();
   const { items: premiumItems, purchaseItem } = usePremiumShopStore();
+  const { watchAdForSpeedUp, canWatchAd, adsRemaining, loading: adLoading } = useAdSpeedUp();
+  const { fetchQueue } = useFactoryStore();
 
   useEffect(() => {
     const fetchRecipeName = async () => {
@@ -95,33 +100,83 @@ const FactoryQueueSlot: React.FC<FactoryQueueSlotProps> = ({ queueItem }) => {
     }
   };
 
+  const handleWatchAd = async () => {
+    try {
+      await watchAdForSpeedUp('factory', slot);
+      await fetchQueue(); // Refresh queue to show updated timer
+    } catch (error) {
+      // Error handled in hook
+    }
+  };
+
   const isReady = timeLeft <= 0 && finishes_at;
   const speedUpItems = premiumItems.filter(item => item.item_type === 'speed_up');
 
+  const getSlotTooltipContent = () => {
+    return [
+      {
+        title: `Production Slot ${slot}`,
+        icon: '🏭',
+        color: 'blue' as const,
+        content: (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <span>Recipe:</span>
+              <span className="font-bold text-cyan-300">{recipeName}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span>Factory:</span>
+              <span className="text-slate-300 capitalize">{factory_type}</span>
+            </div>
+            {isReady ? (
+              <div className="border-t border-slate-700 pt-2 mt-2">
+                <p className="text-xs text-green-300 font-semibold">Ready to collect!</p>
+                <p className="text-xs text-slate-300 mt-1">Click Collect to receive items</p>
+              </div>
+            ) : (
+              <div className="border-t border-slate-700 pt-2 mt-2">
+                <p className="text-xs">Time remaining: {formatTime(timeLeft)}</p>
+                <p className="text-xs text-slate-300 mt-1">Use speed-ups to finish faster</p>
+              </div>
+            )}
+          </div>
+        ),
+      },
+    ];
+  };
+
   return (
-    <div className="text-sm bg-white/10 p-3 rounded-lg shadow-md border border-white/20 flex flex-col sm:flex-row items-center justify-between hover:bg-white/20 transition-all gap-2">
-      <span className="font-semibold text-white/90">Slot {slot}: {recipeName}</span>
-      <div className="flex items-center gap-2">
-        <span className="font-mono bg-gradient-to-r from-black/90 to-gray-900 backdrop-blur-sm text-white text-xs px-3 py-1 rounded-full shadow-lg border border-white/30 min-w-[60px] text-center">
-          {formatTime(timeLeft)}
-        </span>
-        {!isReady && (
-          <button
-            onClick={() => setShowSpeedUpModal(true)}
-            className="px-3 py-1 bg-purple-600 hover:bg-purple-700 text-white text-xs rounded-full transition-colors whitespace-nowrap"
-          >
-            ⏩ Speed Up
-          </button>
-        )}
-        {isReady && (
-          <button
-            onClick={handleCollect}
-            className="px-3 py-1 bg-green-600 hover:bg-green-700 text-white text-xs rounded-full transition-colors whitespace-nowrap"
-          >
-            Collect
-          </button>
-        )}
-      </div>
+    <>
+      <Tooltip content={getSlotTooltipContent()} position="top">
+        <div className="text-sm bg-white/10 p-3 rounded-lg shadow-md border border-white/20 flex flex-col sm:flex-row items-center justify-between hover:bg-white/20 transition-all gap-2">
+          <span className="font-semibold text-white/90">Slot {slot}: {recipeName}</span>
+          <div className="flex items-center gap-2">
+            <span className="font-mono bg-gradient-to-r from-black/90 to-gray-900 backdrop-blur-sm text-white text-xs px-3 py-1 rounded-full shadow-lg border border-white/30 min-w-[60px] text-center">
+              {formatTime(timeLeft)}
+            </span>
+            {!isReady && (
+              <Tooltip content={getActionTooltip('Speed Up Production', undefined, ['Use speed-up items', 'Reduce production time', 'Watch ads for free speed-up'])} position="top">
+                <button
+                  onClick={() => setShowSpeedUpModal(true)}
+                  className="px-3 py-1 bg-purple-600 hover:bg-purple-700 text-white text-xs rounded-full transition-colors whitespace-nowrap"
+                >
+                  ⏩ Speed Up
+                </button>
+              </Tooltip>
+            )}
+            {isReady && (
+              <Tooltip content={getActionTooltip('Collect Items', undefined, ['Receive produced items', 'Adds to inventory', 'Frees up slot'])} position="top">
+                <button
+                  onClick={handleCollect}
+                  className="px-3 py-1 bg-green-600 hover:bg-green-700 text-white text-xs rounded-full transition-colors whitespace-nowrap"
+                >
+                  Collect
+                </button>
+              </Tooltip>
+            )}
+          </div>
+        </div>
+      </Tooltip>
 
       {/* Speed-Up Modal */}
       {showSpeedUpModal && (
@@ -130,6 +185,31 @@ const FactoryQueueSlot: React.FC<FactoryQueueSlotProps> = ({ queueItem }) => {
             <h3 className="text-2xl font-bold text-white mb-4">Speed Up Production</h3>
             <p className="text-slate-300 mb-4">Time remaining: {formatTime(timeLeft)}</p>
             
+            {/* Watch Ad Option */}
+            {canWatchAd && (
+              <button
+                onClick={async () => {
+                  try {
+                    await handleWatchAd();
+                    setShowSpeedUpModal(false);
+                  } catch (error) {
+                    // Error handled in hook
+                  }
+                }}
+                disabled={adLoading}
+                className="w-full flex items-center justify-between p-3 bg-green-700/60 hover:bg-green-600 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg transition-colors mb-4"
+              >
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl">📺</span>
+                  <div className="text-left">
+                    <div className="text-white font-semibold">Watch Ad</div>
+                    <div className="text-green-300 text-sm">-30 minutes (Free)</div>
+                  </div>
+                </div>
+                <div className="text-green-400 font-bold">{adsRemaining} remaining</div>
+              </button>
+            )}
+
             <div className="space-y-2 mb-4">
               {speedUpItems.map((item) => {
                 const minutes = item.metadata?.minutes || 60;
@@ -161,7 +241,7 @@ const FactoryQueueSlot: React.FC<FactoryQueueSlotProps> = ({ queueItem }) => {
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 };
 

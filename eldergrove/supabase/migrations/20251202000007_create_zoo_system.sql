@@ -33,30 +33,44 @@ ALTER TABLE public.animal_types ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.zoo_enclosures ENABLE ROW LEVEL SECURITY;
 
 -- Policy: Everyone can view animal types
+DROP POLICY IF EXISTS "Anyone can view animal types" ON public.animal_types;
 CREATE POLICY "Anyone can view animal types" ON public.animal_types
   FOR SELECT TO authenticated
   USING (true);
 
 -- Policy: Players can view and manage own enclosures
+DROP POLICY IF EXISTS "Players can view own enclosures" ON public.zoo_enclosures;
 CREATE POLICY "Players can view own enclosures" ON public.zoo_enclosures
   FOR SELECT TO authenticated
   USING (auth.uid() = player_id);
 
+DROP POLICY IF EXISTS "Players can insert own enclosures" ON public.zoo_enclosures;
 CREATE POLICY "Players can insert own enclosures" ON public.zoo_enclosures
   FOR INSERT TO authenticated
   WITH CHECK (auth.uid() = player_id);
 
+DROP POLICY IF EXISTS "Players can update own enclosures" ON public.zoo_enclosures;
 CREATE POLICY "Players can update own enclosures" ON public.zoo_enclosures
   FOR UPDATE TO authenticated
   USING (auth.uid() = player_id)
   WITH CHECK (auth.uid() = player_id);
 
+DROP POLICY IF EXISTS "Players can delete own enclosures" ON public.zoo_enclosures;
 CREATE POLICY "Players can delete own enclosures" ON public.zoo_enclosures
   FOR DELETE TO authenticated
   USING (auth.uid() = player_id);
 
 -- Enable realtime
-ALTER PUBLICATION supabase_realtime ADD TABLE public.zoo_enclosures;
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables 
+    WHERE pubname = 'supabase_realtime' 
+    AND tablename = 'zoo_enclosures'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.zoo_enclosures;
+  END IF;
+END $$;
 
 -- Create indexes
 CREATE INDEX IF NOT EXISTS idx_zoo_enclosures_player ON public.zoo_enclosures(player_id);
@@ -112,6 +126,7 @@ DECLARE
   v_enclosure record;
   v_animal_type record;
   v_current_crystals bigint;
+  v_rows_affected integer;
 BEGIN
   -- Validate slot
   IF p_slot NOT IN (1, 2) THEN
@@ -164,12 +179,20 @@ BEGIN
     UPDATE public.zoo_enclosures
     SET animal1_id = p_animal_type_id,
         animal1_produced_at = now()
-    WHERE id = p_enclosure_id;
+    WHERE id = p_enclosure_id AND player_id = v_player_id;
+    GET DIAGNOSTICS v_rows_affected = ROW_COUNT;
+    IF v_rows_affected = 0 THEN
+      RAISE EXCEPTION 'Failed to update enclosure slot 1';
+    END IF;
   ELSE
     UPDATE public.zoo_enclosures
     SET animal2_id = p_animal_type_id,
         animal2_produced_at = now()
-    WHERE id = p_enclosure_id;
+    WHERE id = p_enclosure_id AND player_id = v_player_id;
+    GET DIAGNOSTICS v_rows_affected = ROW_COUNT;
+    IF v_rows_affected = 0 THEN
+      RAISE EXCEPTION 'Failed to update enclosure slot 2';
+    END IF;
   END IF;
 END;
 $$;

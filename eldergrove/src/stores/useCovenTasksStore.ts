@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { createClient } from '@/lib/supabase/client'
-import toast from 'react-hot-toast'
+import { handleError } from '@/hooks/useErrorHandler'
 
 export interface CovenTaskObjective {
   type: string
@@ -45,7 +45,7 @@ export interface CovenTasksState {
   setError: (error: string | null) => void
   fetchTasks: (covenId: string) => Promise<void>
   fetchTaskProgress: (taskId: number) => Promise<void>
-  createTask: (covenId: string, name: string, description: string, objectives: CovenTaskObjective[], rewards: any, expiresHours?: number) => Promise<void>
+  createTask: (covenId: string, name: string, description: string, objectives: CovenTaskObjective[], rewards: CovenTask['rewards'], expiresHours?: number) => Promise<void>
   contributeToTask: (taskId: number, objectiveType: string, increment?: number) => Promise<void>
   claimRewards: (taskId: number) => Promise<void>
   subscribeToTasks: (covenId: string) => () => void
@@ -88,8 +88,9 @@ export const useCovenTasksStore = create<CovenTasksState>((set, get) => ({
       for (const task of tasks) {
         await get().fetchTaskProgress(task.id)
       }
-    } catch (err: any) {
-      setError(err.message)
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to fetch coven tasks'
+      setError(errorMessage)
       console.error('Error fetching coven tasks:', err)
     } finally {
       setLoading(false)
@@ -114,12 +115,13 @@ export const useCovenTasksStore = create<CovenTasksState>((set, get) => ({
       }))
       
       setTaskProgress(taskId, progress)
-    } catch (err: any) {
-      setError(err.message)
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to fetch task progress'
+      setError(errorMessage)
       console.error('Error fetching task progress:', err)
     }
   },
-  createTask: async (covenId: string, name: string, description: string, objectives: CovenTaskObjective[], rewards: any, expiresHours: number = 168) => {
+  createTask: async (covenId: string, name: string, description: string, objectives: CovenTaskObjective[], rewards: CovenTask['rewards'], expiresHours: number = 168) => {
     const { fetchTasks, setError } = get()
     try {
       const supabase = createClient()
@@ -132,12 +134,13 @@ export const useCovenTasksStore = create<CovenTasksState>((set, get) => ({
         p_expires_hours: expiresHours
       })
       if (error) throw error
-      toast.success('Coven task created!')
+      const { useGameMessageStore } = await import('@/stores/useGameMessageStore')
+      useGameMessageStore.getState().addMessage('success', 'Coven task created!')
       await fetchTasks(covenId)
-    } catch (err: any) {
-      setError(err.message)
-      toast.error(`Failed to create task: ${err.message}`)
-      console.error('Error creating task:', err)
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to create task'
+      setError(errorMessage)
+      handleError(err, errorMessage)
       throw err
     }
   },
@@ -151,12 +154,13 @@ export const useCovenTasksStore = create<CovenTasksState>((set, get) => ({
         p_increment: increment
       })
       if (error) throw error
-      toast.success('Contribution recorded!')
+      const { useGameMessageStore } = await import('@/stores/useGameMessageStore')
+      useGameMessageStore.getState().addMessage('success', 'Contribution recorded!')
       await fetchTaskProgress(taskId)
-    } catch (err: any) {
-      setError(err.message)
-      toast.error(`Failed to contribute: ${err.message}`)
-      console.error('Error contributing to task:', err)
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to contribute to task'
+      setError(errorMessage)
+      handleError(err, errorMessage)
       throw err
     }
   },
@@ -168,11 +172,12 @@ export const useCovenTasksStore = create<CovenTasksState>((set, get) => ({
         p_task_id: taskId
       })
       if (error) throw error
-      toast.success('Rewards distributed to all members!')
-    } catch (err: any) {
-      setError(err.message)
-      toast.error(`Failed to claim rewards: ${err.message}`)
-      console.error('Error claiming rewards:', err)
+      const { useGameMessageStore } = await import('@/stores/useGameMessageStore')
+      useGameMessageStore.getState().addMessage('success', 'Rewards distributed to all members!')
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to claim rewards'
+      setError(errorMessage)
+      handleError(err, errorMessage)
       throw err
     }
   },
@@ -191,8 +196,8 @@ export const useCovenTasksStore = create<CovenTasksState>((set, get) => ({
         'postgres_changes',
         { event: '*', schema: 'public', table: 'coven_task_progress' },
         (payload) => {
-          if (payload.new && 'task_id' in payload.new) {
-            get().fetchTaskProgress((payload.new as any).task_id)
+          if (payload.new && 'task_id' in payload.new && typeof payload.new.task_id === 'number') {
+            get().fetchTaskProgress(payload.new.task_id)
           }
         }
       )

@@ -1,0 +1,2 @@
+Failed to run sql query: ERROR:  42P13: cannot change return type of existing function
+HINT:  Use DROP FUNCTION place_decoration(text,integer,integer) first.

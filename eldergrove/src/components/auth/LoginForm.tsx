@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { signInWithGoogle } from '@/lib/supabase/oauth';
+import { User } from '@supabase/supabase-js';
 
 interface LoginFormData {
   email: string;
@@ -22,7 +23,7 @@ const LoginForm: React.FC = () => {
   const supabase = createClient();
   const searchParams = useSearchParams();
 
-  const [user, setUser] = useState(null);
+  const [user, setUser] = useState<User | null>(null);
 
   useEffect(() => {
     const msg = searchParams.get('message');
@@ -59,8 +60,12 @@ const LoginForm: React.FC = () => {
       });
       if (authError) throw authError;
       router.push('/game');
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError('An unexpected error occurred');
+      }
     } finally {
       setLoading(false);
     }
@@ -80,8 +85,12 @@ const LoginForm: React.FC = () => {
       const { error } = await signInWithGoogle();
       if (error) throw error;
       // Note: signInWithGoogle now handles the redirect, so we don't need to do anything here
-    } catch (err: any) {
-      setError(err.message || 'Failed to sign in with Google');
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        setError(err.message || 'Failed to sign in with Google');
+      } else {
+        setError('Failed to sign in with Google');
+      }
     } finally {
       setLoading(false);
     }

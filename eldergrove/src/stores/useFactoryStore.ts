@@ -1,7 +1,8 @@
 import { create } from 'zustand'
 import { createClient } from '@/lib/supabase/client'
-import toast from 'react-hot-toast'
 import { playCollectSound } from '@/lib/audio'
+import { handleError } from '@/hooks/useErrorHandler'
+import { ITEM_NAME_TO_ID } from '@/lib/itemMappings'
 
 interface Factory {
   player_id: string
@@ -26,6 +27,33 @@ export interface Recipe {
   minutes: number
 }
 
+export interface FactorySlotInfo {
+  current_slots_used: number
+  max_slots: number
+  next_cost: number
+  can_add_more: boolean
+}
+
+interface PurchaseSlotResult {
+  success: boolean
+  cost_paid: number
+  new_max_slots: number
+}
+
+interface CollectFactoryResult {
+  success: boolean
+  output: Record<string, number>
+  xp_gained: number
+  new_crystal_balance: number
+  crystals_awarded: number
+}
+
+interface UpgradeFactoryResult {
+  success: boolean
+  new_level: number
+  unlocks_queue_slot: boolean
+}
+
 export interface FactoryState {
   factories: Factory[]
   queue: FactoryQueueItem[]
@@ -33,6 +61,7 @@ export interface FactoryState {
   inventory: Array<{ item_id: number; quantity: number }>
   loading: boolean
   error: string | null
+  slotInfo: FactorySlotInfo | null
   setFactories: (factories: Factory[]) => void
   setQueue: (queue: FactoryQueueItem[]) => void
   setRecipes: (recipes: Recipe[]) => void
@@ -43,6 +72,8 @@ export interface FactoryState {
   fetchQueue: () => Promise<void>
   fetchRecipes: () => Promise<void>
   fetchInventory: () => Promise<void>
+  getSlotInfo: () => Promise<void>
+  purchaseFactorySlot: () => Promise<void>
   subscribeToQueueUpdates: () => () => void
   startProduction: (factory_type: string, recipe_name: string) => Promise<void>
   collectFactory: (slot: number) => Promise<void>
@@ -57,12 +88,51 @@ export const useFactoryStore = create<FactoryState>((set, get) => ({
   inventory: [],
   loading: false,
   error: null,
+  slotInfo: null,
   setFactories: (factories) => set({ factories, error: null }),
   setQueue: (queue) => set({ queue, error: null }),
   setRecipes: (recipes) => set({ recipes, error: null }),
   setInventory: (inventory) => set({ inventory, error: null }),
   setLoading: (loading) => set({ loading }),
   setError: (error) => set({ error }),
+  getSlotInfo: async () => {
+    try {
+      const supabase = createClient()
+      const { data, error } = await supabase.rpc('get_factory_slot_info')
+      if (error) throw error
+      set({ slotInfo: data })
+    } catch (err: unknown) {
+      console.error('Error fetching factory slot info:', err)
+    }
+  },
+  purchaseFactorySlot: async () => {
+    const { getSlotInfo, setError } = get()
+    try {
+      const supabase = createClient()
+      const { data, error } = await supabase.rpc('purchase_factory_slot')
+      if (error) {
+        throw error
+      }
+      
+      const result: PurchaseSlotResult = data
+      if (result.success) {
+        const { useGameMessageStore } = await import('@/stores/useGameMessageStore')
+        useGameMessageStore.getState().addMessage(
+          'success',
+          `Purchased factory slot for ${result.cost_paid} crystals! Max slots: ${result.new_max_slots}`
+        )
+        await getSlotInfo()
+        const { usePlayerStore } = await import('@/stores/usePlayerStore')
+        await usePlayerStore.getState().fetchPlayerProfile()
+      }
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'An unexpected error occurred while purchasing factory slot'
+      const contextualMessage = `Failed to purchase factory slot: ${errorMessage}`
+      setError(contextualMessage)
+      handleError(err, contextualMessage)
+      throw err
+    }
+  },
   fetchFactories: async () => {
     const { setFactories, setLoading, setError } = get()
     setLoading(true)
@@ -80,15 +150,16 @@ export const useFactoryStore = create<FactoryState>((set, get) => ({
         .order('factory_type')
       if (error) throw error
       setFactories(data || [])
-    } catch (err: any) {
-      setError(err.message)
-      console.error('Error fetching factories:', err)
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to fetch factories'
+      setError(errorMessage)
+      handleError(err, errorMessage)
     } finally {
       setLoading(false)
     }
   },
   fetchQueue: async () => {
-    const { setQueue, setLoading, setError } = get()
+    const { setQueue, setLoading, setError, getSlotInfo } = get()
     setLoading(true)
     setError(null)
     try {
@@ -105,9 +176,12 @@ export const useFactoryStore = create<FactoryState>((set, get) => ({
         .order('slot')
       if (error) throw error
       setQueue(data || [])
-    } catch (err: any) {
-      setError(err.message)
-      console.error('Error fetching factory queue:', err)
+      // Also fetch slot info
+      await getSlotInfo()
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to fetch factory queue'
+      setError(errorMessage)
+      handleError(err, errorMessage)
     } finally {
       setLoading(false)
     }
@@ -120,46 +194,106 @@ export const useFactoryStore = create<FactoryState>((set, get) => ({
         'postgres_changes',
         { event: '*', schema: 'public', table: 'factory_queue' },
         () => {
-          get().fetchQueue()
+          get().fetchQueue().catch((err) => {
+            console.error('Error in subscription callback:', err)
+          })
         }
       )
-      .subscribe()
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          console.log('Subscribed to factory queue updates')
+        } else if (status === 'CHANNEL_ERROR') {
+          const { setError } = get()
+          setError('Failed to subscribe to real-time updates')
+          console.error('Subscription error for factory queue')
+        }
+      })
 
     return () => {
       supabase.removeChannel(channel)
     }
   },
   startProduction: async (factory_type: string, recipe_name: string) => {
-    const { fetchQueue } = get()
+    const { fetchQueue, setError } = get()
     try {
       const supabase = createClient()
       const { error } = await supabase.rpc('start_factory_production', {
         p_factory_type: factory_type,
         p_recipe_name: recipe_name
       })
-      if (error) throw error
+      if (error) {
+        // Log detailed error information before throwing
+        console.error(`Start production failed for factory ${factory_type}, recipe ${recipe_name}:`, {
+          message: error.message || 'No message',
+          details: error.details || null,
+          hint: error.hint || null,
+          code: error.code || null,
+        })
+        throw error
+      }
       await fetchQueue()
-      toast.success(`${recipe_name} production started!`)
-    } catch (err: any) {
-      toast.error(`Failed to start production: ${err.message}`)
-      console.error('Failed to start production:', err)
+      const { useGameMessageStore } = await import('@/stores/useGameMessageStore')
+      useGameMessageStore.getState().addMessage(
+        'success',
+        `${recipe_name} production started!`
+      )
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : `An unexpected error occurred while starting ${recipe_name} production in ${factory_type}`
+      const contextualMessage = `Failed to start ${recipe_name} production in ${factory_type}: ${errorMessage}`
+      setError(contextualMessage)
+      handleError(err, contextualMessage)
       throw err
     }
   },
   collectFactory: async (slot: number) => {
-    const { fetchQueue } = get()
+    const { fetchQueue, setError } = get()
     try {
       const supabase = createClient()
-      const { error } = await supabase.rpc('collect_factory', {
+      const { data: result, error } = await supabase.rpc('collect_factory', {
         p_slot: slot
       })
-      if (error) throw error
+      if (error) {
+        // Log detailed error information before throwing
+        console.error(`Collect factory failed for slot ${slot}:`, {
+          message: error.message || 'No message',
+          details: error.details || null,
+          hint: error.hint || null,
+          code: error.code || null,
+        })
+        throw error
+      }
+      
+      // Parse the jsonb response
+      const collectionResult: CollectFactoryResult = result
+      
+      // Refresh player profile to update XP, level, and crystals (XP is granted by collect_factory)
+      const { usePlayerStore } = await import('@/stores/usePlayerStore')
+      // Update crystal balance from the response
+      if (collectionResult.new_crystal_balance !== null && collectionResult.new_crystal_balance !== undefined) {
+        usePlayerStore.getState().setCrystals(collectionResult.new_crystal_balance)
+      }
+      // Fetch full profile to update XP and level
+      await usePlayerStore.getState().fetchPlayerProfile()
+      
       await fetchQueue()
       playCollectSound()
-      toast.success('Factory output collected!')
-    } catch (err: any) {
-      toast.error(`Failed to collect factory output: ${err.message}`)
-      console.error('Failed to collect factory output:', err)
+      
+      // Show visual feedback using game message system
+      const { useGameMessageStore } = await import('@/stores/useGameMessageStore')
+      useGameMessageStore.getState().addMessage(
+        'collection',
+        'Collection Complete!',
+        {
+          items: collectionResult.output,
+          crystals: collectionResult.crystals_awarded > 0 ? collectionResult.crystals_awarded : undefined,
+          xp: collectionResult.xp_gained > 0 ? collectionResult.xp_gained : undefined,
+        }
+      )
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : `An unexpected error occurred while collecting factory output from slot ${slot}`
+      const contextualMessage = `Failed to collect factory output from slot ${slot}: ${errorMessage}`
+      setError(contextualMessage)
+      handleError(err, contextualMessage)
       throw err
     }
   },
@@ -175,15 +309,27 @@ export const useFactoryStore = create<FactoryState>((set, get) => ({
         .order('id', { ascending: true })
       if (error) throw error
       // Parse JSONB fields
-      const recipes = (data || []).map(recipe => ({
-        ...recipe,
-        input: typeof recipe.input === 'string' ? JSON.parse(recipe.input) : recipe.input,
-        output: typeof recipe.output === 'string' ? JSON.parse(recipe.output) : recipe.output
-      }))
+      const recipes = (data || []).map(recipe => {
+        try {
+          return {
+            ...recipe,
+            input: typeof recipe.input === 'string' ? JSON.parse(recipe.input) : recipe.input,
+            output: typeof recipe.output === 'string' ? JSON.parse(recipe.output) : recipe.output
+          }
+        } catch (parseError) {
+          console.error('Error parsing recipe JSON:', parseError, recipe)
+          return {
+            ...recipe,
+            input: {},
+            output: {}
+          }
+        }
+      })
       setRecipes(recipes)
-    } catch (err: any) {
-      setError(err.message)
-      console.error('Error fetching recipes:', err)
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to fetch recipes'
+      setError(errorMessage)
+      handleError(err, errorMessage)
     } finally {
       setLoading(false)
     }
@@ -204,9 +350,10 @@ export const useFactoryStore = create<FactoryState>((set, get) => ({
         .eq('player_id', user.id)
       if (error) throw error
       setInventory(data || [])
-    } catch (err: any) {
-      setError(err.message)
-      console.error('Error fetching inventory:', err)
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to fetch inventory'
+      setError(errorMessage)
+      handleError(err, errorMessage)
     } finally {
       setLoading(false)
     }
@@ -218,45 +365,40 @@ export const useFactoryStore = create<FactoryState>((set, get) => ({
       const { data, error } = await supabase.rpc('upgrade_factory', {
         p_factory_type: factoryType
       })
-      if (error) throw error
+      if (error) {
+        throw error
+      }
       
-      const result = data as { success: boolean; new_level: number; unlocks_queue_slot: boolean }
+      const result: UpgradeFactoryResult = data
       
       if (result.success) {
-        toast.success(`Factory upgraded to level ${result.new_level}!${result.unlocks_queue_slot ? ' New queue slot unlocked!' : ''}`)
+        const { useGameMessageStore } = await import('@/stores/useGameMessageStore')
+        useGameMessageStore.getState().addMessage(
+          'success',
+          `Factory upgraded to level ${result.new_level}!${result.unlocks_queue_slot ? ' New queue slot unlocked!' : ''}`
+        )
         await fetchFactories()
         await fetchInventory()
+        const { usePlayerStore } = await import('./usePlayerStore')
+        await usePlayerStore.getState().fetchPlayerProfile()
       }
-    } catch (err: any) {
-      setError(err.message)
-      toast.error(`Failed to upgrade factory: ${err.message}`)
-      console.error('Error upgrading factory:', err)
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to upgrade factory'
+      setError(errorMessage)
+      handleError(err, errorMessage)
       throw err
     }
   },
   canCraftRecipe: (recipe: Recipe) => {
     const { inventory } = get()
-    const itemNameToId: Record<string, number> = {
-      'wheat': 1,
-      'carrot': 2,
-      'potato': 3,
-      'tomato': 4,
-      'corn': 5,
-      'pumpkin': 6,
-      'bread': 8,
-      'berry': 11,
-      'herbs': 12,
-      'magic_mushroom': 13,
-      'enchanted_flower': 14
-    }
 
     for (const [itemName, requiredQty] of Object.entries(recipe.input)) {
-      const itemId = itemNameToId[itemName.toLowerCase()]
+      const itemId = ITEM_NAME_TO_ID[itemName.toLowerCase()]
       if (!itemId) return false
-      
+
       const inventoryItem = inventory.find(inv => inv.item_id === itemId)
       const availableQty = inventoryItem?.quantity || 0
-      
+
       if (availableQty < requiredQty) {
         return false
       }

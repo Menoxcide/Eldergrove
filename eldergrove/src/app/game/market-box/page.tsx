@@ -1,12 +1,12 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import toast from 'react-hot-toast';
 import { useMarketBoxStore } from '@/stores/useMarketBoxStore';
 import { useInventoryStore } from '@/stores/useInventoryStore';
 import { usePlayerStore } from '@/stores/usePlayerStore';
 import { Skeleton } from '@/components/ui/LoadingSkeleton';
 import { getItemIcon, getItemName } from '@/lib/itemUtils';
+import { useErrorHandler } from '@/hooks/useErrorHandler';
 
 export default function MarketBoxPage() {
   const {
@@ -26,6 +26,7 @@ export default function MarketBoxPage() {
   const [selectedItem, setSelectedItem] = useState<{ item_id: number; quantity: number } | null>(null);
   const [price, setPrice] = useState('');
   const [quantity, setQuantity] = useState('');
+  const { showError } = useErrorHandler();
 
   useEffect(() => {
     fetchListings();
@@ -36,17 +37,17 @@ export default function MarketBoxPage() {
 
   const handleCreateListing = async () => {
     if (!selectedItem || !price || !quantity) {
-      toast.error('Please fill in all fields');
+      showError('Missing Information', 'Please fill in all fields (item, quantity, and price).');
       return;
     }
     const priceNum = parseInt(price);
     const qtyNum = parseInt(quantity);
     if (isNaN(priceNum) || priceNum <= 0) {
-      toast.error('Price must be a positive number');
+      showError('Invalid Price', 'Price must be a positive number.');
       return;
     }
     if (isNaN(qtyNum) || qtyNum <= 0 || qtyNum > selectedItem.quantity) {
-      toast.error('Invalid quantity');
+      showError('Invalid Quantity', `Quantity must be between 1 and ${selectedItem.quantity.toLocaleString()}.`, { itemId: selectedItem.item_id, available: selectedItem.quantity, required: qtyNum });
       return;
     }
     try {

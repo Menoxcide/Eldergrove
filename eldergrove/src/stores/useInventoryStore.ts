@@ -1,27 +1,8 @@
 import { create } from 'zustand'
 import { createClient } from '@/lib/supabase/client'
-import toast from 'react-hot-toast'
-
-export const getItemName = (itemId: number): string => {
-  // This is a simplified mapping - in a real app, this would come from a database or config
-  const itemNames: Record<number, string> = {
-    1: 'Wheat',
-    2: 'Carrot',
-    3: 'Potato',
-    4: 'Tomato',
-    5: 'Corn',
-    6: 'Pumpkin',
-    7: 'Minor Healing Potion',
-    8: 'Bread',
-    9: 'Magic Essence',
-    10: 'Enchanted Seeds',
-    11: 'Berry',
-    12: 'Herbs',
-    13: 'Magic Mushroom',
-    14: 'Enchanted Flower'
-  };
-  return itemNames[itemId] || `Item ${itemId}`;
-};
+import { handleError } from '@/hooks/useErrorHandler'
+import { useGameMessageStore } from '@/stores/useGameMessageStore'
+import { getItemNameWithLevel } from '@/lib/itemUtils'
 
 interface InventoryItem {
   player_id: string
@@ -34,6 +15,13 @@ export interface StorageUsage {
   used: number
   available: number
   percentage: number
+}
+
+interface UpgradeWarehouseResult {
+  success: boolean
+  new_level: number
+  new_capacity: number
+  cost: number
 }
 
 export interface InventoryState {
@@ -61,18 +49,28 @@ export const useInventoryStore = create<InventoryState>((set, get) => ({
   setInventory: (inventory) => {
     const { previousInventory } = get();
     
-    // Check for new items or quantity increases
-    inventory.forEach((item) => {
-      const previousItem = previousInventory.find((prev) => prev.item_id === item.item_id);
-      if (!previousItem) {
-        // New item added
-        toast.success(`+${item.quantity} ${getItemName(item.item_id)} added to inventory!`);
-      } else if (item.quantity > previousItem.quantity) {
-        // Quantity increased
-        const diff = item.quantity - previousItem.quantity;
-        toast.success(`+${diff} ${getItemName(item.item_id)} added to inventory!`);
-      }
-    });
+    // Only show messages if this is not the initial load (previousInventory is not empty)
+    // This prevents showing messages for all items when the game restarts
+    if (previousInventory.length > 0) {
+      // Check for new items or quantity increases
+      inventory.forEach((item) => {
+        const previousItem = previousInventory.find((prev) => prev.item_id === item.item_id);
+        if (!previousItem) {
+          // New item added
+          useGameMessageStore.getState().addMessage(
+            'success',
+            `+${item.quantity} ${getItemNameWithLevel(item.item_id)} added to inventory!`
+          );
+        } else if (item.quantity > previousItem.quantity) {
+          // Quantity increased
+          const diff = item.quantity - previousItem.quantity;
+          useGameMessageStore.getState().addMessage(
+            'success',
+            `+${diff} ${getItemNameWithLevel(item.item_id)} added to inventory!`
+          );
+        }
+      });
+    }
     
     set({ inventory, previousInventory: inventory, error: null });
   },
@@ -93,12 +91,14 @@ export const useInventoryStore = create<InventoryState>((set, get) => ({
         .from('inventory')
         .select('*')
         .eq('player_id', user.id)
+        .gt('quantity', 0)  // Only fetch items with quantity > 0
         .order('item_id', { ascending: true })
       if (error) throw error
       setInventory(data || [])
-    } catch (err: any) {
-      setError(err.message)
-      console.error('Error fetching inventory:', err)
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to fetch inventory'
+      setError(errorMessage)
+      handleError(err, errorMessage)
     } finally {
       setLoading(false)
     }
@@ -115,10 +115,20 @@ export const useInventoryStore = create<InventoryState>((set, get) => ({
           table: 'inventory'
         },
         () => {
-          get().fetchInventory()
+          get().fetchInventory().catch((err) => {
+            console.error('Error in subscription callback:', err)
+          })
         }
       )
-      .subscribe()
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          console.log('Subscribed to inventory updates')
+        } else if (status === 'CHANNEL_ERROR') {
+          const { setError } = get()
+          setError('Failed to subscribe to real-time updates')
+          console.error('Subscription error for inventory')
+        }
+      })
 
     return () => {
       supabase.removeChannel(channel)
@@ -137,10 +147,11 @@ export const useInventoryStore = create<InventoryState>((set, get) => ({
         p_player_id: user.id
       })
       if (error) throw error
-      setStorageUsage(data as StorageUsage)
-    } catch (err: any) {
-      setError(err.message)
-      console.error('Error fetching storage usage:', err)
+      setStorageUsage(data)
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to fetch storage usage'
+      setError(errorMessage)
+      handleError(err, errorMessage)
     }
   },
   upgradeWarehouse: async () => {
@@ -150,17 +161,20 @@ export const useInventoryStore = create<InventoryState>((set, get) => ({
       const { data, error } = await supabase.rpc('upgrade_warehouse')
       if (error) throw error
       
-      const result = data as { success: boolean; new_level: number; new_capacity: number; cost: number }
+      const result: UpgradeWarehouseResult = data
       
       if (result.success) {
-        toast.success(`Warehouse upgraded to level ${result.new_level}! Capacity: ${result.new_capacity}`)
+        useGameMessageStore.getState().addMessage(
+          'success',
+          `Warehouse upgraded to level ${result.new_level}! Capacity: ${result.new_capacity}`
+        );
         await fetchStorageUsage()
         await fetchInventory()
       }
-    } catch (err: any) {
-      setError(err.message)
-      toast.error(`Failed to upgrade warehouse: ${err.message}`)
-      console.error('Error upgrading warehouse:', err)
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to upgrade warehouse'
+      setError(errorMessage)
+      handleError(err, errorMessage)
       throw err
     }
   },

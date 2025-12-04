@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { createClient } from '@/lib/supabase/client'
-import toast from 'react-hot-toast'
+import { handleError } from '@/hooks/useErrorHandler'
 
 export interface Friend {
   id: number
@@ -108,12 +108,12 @@ export const useFriendsStore = create<FriendsState>((set, get) => ({
         p_friend_id: friendId
       })
       if (error) throw error
-      toast.success('Friend request sent!')
+      const { useGameMessageStore } = await import('@/stores/useGameMessageStore')
+      useGameMessageStore.getState().addMessage('success', 'Friend request sent!')
       await fetchFriends()
     } catch (err: any) {
       setError(err.message)
-      toast.error(`Failed to send friend request: ${err.message}`)
-      console.error('Error sending friend request:', err)
+      handleError(err, err.message)
       throw err
     }
   },
@@ -125,12 +125,12 @@ export const useFriendsStore = create<FriendsState>((set, get) => ({
         p_friend_id: friendId
       })
       if (error) throw error
-      toast.success('Friend request accepted!')
+      const { useGameMessageStore } = await import('@/stores/useGameMessageStore')
+      useGameMessageStore.getState().addMessage('success', 'Friend request accepted!')
       await fetchFriends()
     } catch (err: any) {
       setError(err.message)
-      toast.error(`Failed to accept friend request: ${err.message}`)
-      console.error('Error accepting friend request:', err)
+      handleError(err, err.message)
       throw err
     }
   },
@@ -142,12 +142,12 @@ export const useFriendsStore = create<FriendsState>((set, get) => ({
         p_friend_id: friendId
       })
       if (error) throw error
-      toast.success('Friend removed')
+      const { useGameMessageStore } = await import('@/stores/useGameMessageStore')
+      useGameMessageStore.getState().addMessage('success', 'Friend removed')
       await fetchFriends()
     } catch (err: any) {
       setError(err.message)
-      toast.error(`Failed to remove friend: ${err.message}`)
-      console.error('Error removing friend:', err)
+      handleError(err, err.message)
       throw err
     }
   },
@@ -161,11 +161,11 @@ export const useFriendsStore = create<FriendsState>((set, get) => ({
         p_slot: slot
       })
       if (error) throw error
-      toast.success('Helped friend speed up production!')
+      const { useGameMessageStore } = await import('@/stores/useGameMessageStore')
+      useGameMessageStore.getState().addMessage('success', 'Helped friend speed up production!')
     } catch (err: any) {
       setError(err.message)
-      toast.error(`Failed to help friend: ${err.message}`)
-      console.error('Error helping friend:', err)
+      handleError(err, err.message)
       throw err
     }
   },
@@ -178,11 +178,11 @@ export const useFriendsStore = create<FriendsState>((set, get) => ({
         p_order_id: orderId
       })
       if (error) throw error
-      toast.success('Helped friend fill order!')
+      const { useGameMessageStore } = await import('@/stores/useGameMessageStore')
+      useGameMessageStore.getState().addMessage('success', 'Helped friend fill order!')
     } catch (err: any) {
       setError(err.message)
-      toast.error(`Failed to help friend: ${err.message}`)
-      console.error('Error helping friend:', err)
+      handleError(err, err.message)
       throw err
     }
   },
@@ -197,8 +197,7 @@ export const useFriendsStore = create<FriendsState>((set, get) => ({
       return data
     } catch (err: any) {
       setError(err.message)
-      toast.error(`Failed to visit friend town: ${err.message}`)
-      console.error('Error visiting friend town:', err)
+      handleError(err, err.message)
       throw err
     }
   },

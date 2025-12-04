@@ -2,10 +2,13 @@
 
 import { useEffect, useState } from 'react';
 import { useSkyportStore, type SkyportOrder } from '@/stores/useSkyportStore';
-import { useInventoryStore, getItemName } from '@/stores/useInventoryStore';
-import { getItemIcon } from '@/lib/itemUtils';
+import { useInventoryStore } from '@/stores/useInventoryStore';
+import { getItemIcon, getItemNameWithLevel } from '@/lib/itemUtils';
 import { Skeleton } from '@/components/ui/LoadingSkeleton';
 import { usePlayerStore } from '@/stores/usePlayerStore';
+import { useErrorHandler } from '@/hooks/useErrorHandler';
+import Tooltip from '@/components/ui/Tooltip';
+import { getOrderTooltip, getActionTooltip } from '@/lib/tooltipUtils';
 
 interface OrderCardProps {
   order: SkyportOrder;
@@ -20,8 +23,18 @@ const OrderCard: React.FC<OrderCardProps> = ({ order, onFulfill, inventory }) =>
   useEffect(() => {
     const updateTime = () => {
       const now = Date.now();
-      const expiresTime = new Date(order.expires_at).getTime();
-      setTimeLeft(Math.max(0, (expiresTime - now) / 1000));
+      const expiresDate = new Date(order.expires_at);
+      const expiresTime = expiresDate.getTime();
+      
+      // Check if date is valid
+      if (isNaN(expiresTime)) {
+        console.error('Invalid expires_at date:', order.expires_at);
+        setTimeLeft(0);
+        return;
+      }
+      
+      const diffSeconds = (expiresTime - now) / 1000;
+      setTimeLeft(Math.max(0, diffSeconds));
     };
 
     updateTime();
@@ -45,7 +58,7 @@ const OrderCard: React.FC<OrderCardProps> = ({ order, onFulfill, inventory }) =>
   }, [order.requirements, inventory, timeLeft]);
 
   const formatTime = (seconds: number): string => {
-    if (seconds <= 0) return 'Expired';
+    if (!isFinite(seconds) || seconds <= 0) return 'Expired';
     const hours = Math.floor(seconds / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
     const secs = Math.floor(seconds % 60);
@@ -83,7 +96,8 @@ const OrderCard: React.FC<OrderCardProps> = ({ order, onFulfill, inventory }) =>
   };
 
   return (
-    <div className={`bg-gradient-to-br ${getOrderTypeColor(order.order_type)} rounded-2xl p-6 border-2 border-white/20 shadow-lg`}>
+    <Tooltip content={getOrderTooltip(order, inventory)} position="top">
+      <div className={`bg-gradient-to-br ${getOrderTypeColor(order.order_type)} rounded-2xl p-6 border-2 border-white/20 shadow-lg`}>
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-3">
           <span className="text-4xl">{getOrderTypeIcon(order.order_type)}</span>
@@ -117,7 +131,7 @@ const OrderCard: React.FC<OrderCardProps> = ({ order, onFulfill, inventory }) =>
                 <span className="text-2xl">{getItemIcon(itemId)}</span>
                 <div>
                   <div className={`text-sm font-semibold ${hasEnough ? 'text-white' : 'text-red-200'}`}>
-                    {requiredQty} {getItemName(itemId)}
+                    {requiredQty} {getItemNameWithLevel(itemId)}
                   </div>
                   {!hasEnough && (
                     <div className="text-xs text-red-300">({availableQty} available)</div>
@@ -149,7 +163,7 @@ const OrderCard: React.FC<OrderCardProps> = ({ order, onFulfill, inventory }) =>
             return (
               <div key={itemId} className="flex items-center gap-2 px-3 py-2 bg-green-900/50 rounded-lg">
                 <span className="text-xl">{getItemIcon(itemId)}</span>
-                <span className="text-white font-semibold">{qty} {getItemName(itemId)}</span>
+                <span className="text-white font-semibold">{qty} {getItemNameWithLevel(itemId)}</span>
               </div>
             );
           })}
@@ -168,13 +182,15 @@ const OrderCard: React.FC<OrderCardProps> = ({ order, onFulfill, inventory }) =>
         {canFulfill ? 'Fulfill Order' : timeLeft <= 0 ? 'Expired' : 'Insufficient Items'}
       </button>
     </div>
+    </Tooltip>
   );
 };
 
 export default function SkyportPage() {
-  const { orders, loading, fetchOrders, generateOrders, fulfillOrder, subscribeToOrders } = useSkyportStore();
+  const { orders, loading, error, fetchOrders, generateOrders, fulfillOrder, subscribeToOrders } = useSkyportStore();
   const { inventory, fetchInventory } = useInventoryStore();
   const { crystals } = usePlayerStore();
+  const { showError } = useErrorHandler();
 
   useEffect(() => {
     fetchOrders();
@@ -184,6 +200,35 @@ export default function SkyportPage() {
   }, [fetchOrders, fetchInventory, subscribeToOrders]);
 
   const handleFulfill = async (orderId: number) => {
+    // Pre-validation: Check if player has all required items
+    const order = orders.find(o => o.id === orderId);
+    if (order) {
+      const missingItems: Array<{ itemId: number; required: number; available: number }> = [];
+      
+      for (const [itemIdStr, requiredQty] of Object.entries(order.requirements)) {
+        const itemId = parseInt(itemIdStr);
+        const inventoryItem = inventory.find(inv => inv.item_id === itemId);
+        const availableQty = inventoryItem?.quantity || 0;
+        
+        if (availableQty < requiredQty) {
+          missingItems.push({ itemId, required: requiredQty, available: availableQty });
+        }
+      }
+      
+      if (missingItems.length > 0) {
+        const firstMissing = missingItems[0];
+        showError(
+          'Insufficient Items',
+          `You need ${(firstMissing.required - firstMissing.available).toLocaleString()} more ${getItemNameWithLevel(firstMissing.itemId)} to fulfill this order.`,
+          { itemId: firstMissing.itemId, required: firstMissing.required, available: firstMissing.available },
+          missingItems.length > 1 
+            ? `You're missing ${missingItems.length} different items. Gather the required items to fulfill this order.`
+            : `Gather more ${getItemNameWithLevel(firstMissing.itemId)} to fulfill this order.`
+        );
+        return;
+      }
+    }
+    
     try {
       await fulfillOrder(orderId);
       await fetchInventory();
@@ -223,12 +268,14 @@ export default function SkyportPage() {
               <span className="text-2xl">💎</span>
               <span className="text-white font-mono">{crystals.toLocaleString()}</span>
             </div>
-            <button
-              onClick={handleGenerateOrders}
-              className="px-4 py-2 bg-green-600 hover:bg-green-500 text-white rounded-lg font-semibold transition-colors"
-            >
-              Generate Orders
-            </button>
+            <Tooltip content={getActionTooltip('Generate Orders', undefined, ['Create new skyport orders', 'Orders expire after time', 'Fulfill for rewards', 'Can generate multiple times'])} position="bottom">
+              <button
+                onClick={handleGenerateOrders}
+                className="px-4 py-2 bg-green-600 hover:bg-green-500 text-white rounded-lg font-semibold transition-colors"
+              >
+                Generate Orders
+              </button>
+            </Tooltip>
           </div>
         </div>
 
@@ -236,6 +283,11 @@ export default function SkyportPage() {
           <p className="text-slate-300 text-center">
             Fulfill orders to earn crystals, XP, and special items. Orders expire, so act quickly!
           </p>
+          {error && (
+            <div className="mt-4 p-3 bg-red-500/20 border border-red-500/50 rounded-xl text-red-200 text-sm text-center">
+              {error}
+            </div>
+          )}
         </div>
 
         {orders.length === 0 ? (

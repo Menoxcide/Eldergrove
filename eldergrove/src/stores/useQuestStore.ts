@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { createClient } from '@/lib/supabase/client'
-import toast from 'react-hot-toast'
 import { usePlayerStore } from './usePlayerStore'
+import { handleError } from '@/hooks/useErrorHandler'
 
 export interface QuestObjective {
   type: string
@@ -139,11 +139,11 @@ export const useQuestStore = create<QuestState>((set, get) => ({
       })
       if (error) throw error
       await fetchPlayerQuests()
-      toast.success('Quest started!')
+      const { useGameMessageStore } = await import('@/stores/useGameMessageStore')
+      useGameMessageStore.getState().addMessage('success', 'Quest started!')
     } catch (err: any) {
       setError(err.message)
-      toast.error(`Failed to start quest: ${err.message}`)
-      console.error('Error starting quest:', err)
+      handleError(err, err.message)
       throw err
     }
   },
@@ -156,19 +156,28 @@ export const useQuestStore = create<QuestState>((set, get) => ({
       })
       if (error) throw error
 
-      const result = data as { success: boolean; crystals_awarded: number; xp_awarded: number }
+      const result = data as { success: boolean; crystals_awarded: number; xp_awarded: number; new_crystal_balance: number }
       
       if (result.success) {
-        const playerStore = usePlayerStore.getState()
-        playerStore.addCrystals(result.crystals_awarded)
+        // Use the returned crystal balance directly to avoid race conditions
+        if (result.new_crystal_balance !== null && result.new_crystal_balance !== undefined) {
+          const playerStore = usePlayerStore.getState()
+          playerStore.setCrystals(result.new_crystal_balance)
+        }
         
-        toast.success(`Quest completed! +${result.crystals_awarded} crystals, +${result.xp_awarded} XP`)
+        // Refresh player profile to update XP and level (XP is granted by claim_quest_reward)
+        await usePlayerStore.getState().fetchPlayerProfile()
+        
+        const { useGameMessageStore } = await import('@/stores/useGameMessageStore')
+        useGameMessageStore.getState().addMessage(
+          'success',
+          `Quest completed! +${result.crystals_awarded} crystals, +${result.xp_awarded} XP`
+        )
         await fetchPlayerQuests()
       }
     } catch (err: any) {
       setError(err.message)
-      toast.error(`Failed to claim quest reward: ${err.message}`)
-      console.error('Error claiming quest reward:', err)
+      handleError(err, err.message)
       throw err
     }
   },
@@ -185,11 +194,11 @@ export const useQuestStore = create<QuestState>((set, get) => ({
       })
       if (error) throw error
       await fetchPlayerQuests()
-      toast.success('Daily quests generated!')
+      const { useGameMessageStore } = await import('@/stores/useGameMessageStore')
+      useGameMessageStore.getState().addMessage('success', 'Daily quests generated!')
     } catch (err: any) {
       setError(err.message)
-      toast.error(`Failed to generate daily quests: ${err.message}`)
-      console.error('Error generating daily quests:', err)
+      handleError(err, err.message)
     }
   },
   subscribeToQuests: () => {

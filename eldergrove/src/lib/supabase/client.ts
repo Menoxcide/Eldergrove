@@ -11,12 +11,9 @@ if (!supabaseUrl || !supabaseKey) {
   throw new Error('Supabase environment variables not configured');
 }
 
-console.log('Creating Supabase client with URL:', supabaseUrl);
-
 export const createClient = () => {
   try {
     const client = createBrowserClient(supabaseUrl, supabaseKey);
-    console.log('Supabase client created successfully');
     return client;
   } catch (error) {
     console.error('Failed to create Supabase client:', error);

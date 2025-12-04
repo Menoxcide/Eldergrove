@@ -1,5 +1,13 @@
 import { create } from 'zustand'
 import { claimDailyReward, DailyRewardResponse } from '@/lib/supabase/dailyReward'
+import { handleError } from '@/hooks/useErrorHandler'
+
+interface ExpandTownResult {
+  success: boolean
+  old_size: number
+  new_size: number
+  cost_crystals: number
+}
 
 interface PlayerProfile {
   id: string
@@ -28,6 +36,7 @@ interface PlayerState {
   setError: (error: string | null) => void
   addCrystals: (amount: number) => void
   removeCrystals: (amount: number) => void
+  setCrystals: (amount: number) => void
   setPopulation: (population: number) => void
   setTownSize: (size: number) => void
   fetchPlayerProfile: () => Promise<void>
@@ -65,6 +74,9 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   removeCrystals: (amount) => set((state) => ({
     crystals: Math.max(0, state.crystals - amount)
   })),
+  setCrystals: (amount) => set({
+    crystals: Math.max(0, amount)
+  }),
   setPopulation: (population) => set({ population }),
   setTownSize: (size) => set({ townSize: size }),
   expandTown: async (direction: string = 'all') => {
@@ -77,17 +89,21 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       })
       if (error) throw error
       
-      const result = data as { success: boolean; old_size: number; new_size: number; cost_crystals: number }
+      const result: ExpandTownResult = data
       
       if (result.success) {
         await fetchPlayerProfile()
-        const { toast } = await import('react-hot-toast')
-        toast.success(`Town expanded to ${result.new_size}x${result.new_size}!`)
+        const { useGameMessageStore } = await import('@/stores/useGameMessageStore')
+        useGameMessageStore.getState().addMessage(
+          'success',
+          `Town expanded to ${result.new_size}x${result.new_size}!`
+        )
       }
-    } catch (err: any) {
-      console.error('Error expanding town:', err)
-      const { toast } = await import('react-hot-toast')
-      toast.error(`Failed to expand town: ${err.message}`)
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to expand town'
+      const { setError } = get()
+      setError(errorMessage)
+      handleError(err, errorMessage)
       throw err
     }
   },
@@ -100,8 +116,9 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       })
       if (error) throw error
       return data as number
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error getting expansion cost:', err)
+      // Don't show error dialog for this - it's a background check
       return 0
     }
   },
@@ -122,8 +139,11 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         .single()
       if (error) throw error
       setPlayer(data)
-    } catch (err: any) {
-      console.error('Error fetching player profile:', err)
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to fetch player profile'
+      const { setError } = get()
+      setError(errorMessage)
+      handleError(err, errorMessage)
     } finally {
       setLoading(false)
     }
@@ -132,9 +152,10 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     const response = await claimDailyReward();
     
     // If successful and reward was awarded, update crystals in store
-    if (response.success && response.crystalsAwarded && !response.alreadyClaimed) {
+    if (response.success && response.crystalsAwarded != null && !response.alreadyClaimed) {
+      const crystals = response.crystalsAwarded;
       set((state) => ({
-        crystals: state.crystals + response.crystalsAwarded!
+        crystals: state.crystals + crystals
       }));
     }
     

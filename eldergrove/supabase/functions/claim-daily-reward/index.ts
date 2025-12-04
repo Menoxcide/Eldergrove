@@ -1,8 +1,6 @@
-// Import necessary modules
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
-// Initialize Supabase client
 const supabase = createClient(
   Deno.env.get('SUPABASE_URL') ?? '',
   Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
@@ -17,7 +15,6 @@ interface ClaimResponse {
 
 serve(async (_req) => {
   try {
-    // Get the user from the request headers
     const authHeader = _req.headers.get('Authorization');
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return new Response(
@@ -37,7 +34,6 @@ serve(async (_req) => {
 
     const token = authHeader.substring(7);
     
-    // Verify the user
     const { data: { user }, error: userError } = await supabase.auth.getUser(token);
     if (userError || !user) {
       return new Response(
@@ -57,8 +53,7 @@ serve(async (_req) => {
 
     const userId = user.id;
     const today = new Date().toISOString().split('T')[0]; // Get date in YYYY-MM-DD format
-
-    // Check if user has already claimed today
+    
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
       .select('last_claimed_date, crystals')
@@ -80,8 +75,7 @@ serve(async (_req) => {
         }
       );
     }
-
-    // If already claimed today, return appropriate response
+    
     if (profile.last_claimed_date === today) {
       return new Response(
         JSON.stringify({ 
@@ -98,12 +92,10 @@ serve(async (_req) => {
         }
       );
     }
-
-    // User hasn't claimed today, so award 500 crystals
+    
     const crystalsToAdd = 500;
     const newCrystalsTotal = profile.crystals + crystalsToAdd;
     
-    // Update profile with new crystals and last claimed date
     const { data: updatedProfile, error: updateError } = await supabase
       .from('profiles')
       .update({
@@ -129,8 +121,7 @@ serve(async (_req) => {
         }
       );
     }
-
-    // Return success response
+    
     return new Response(
       JSON.stringify({ 
         success: true, 

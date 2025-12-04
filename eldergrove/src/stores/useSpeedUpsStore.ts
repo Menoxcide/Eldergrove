@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { createClient } from '@/lib/supabase/client'
-import toast from 'react-hot-toast'
+import { handleError } from '@/hooks/useErrorHandler'
 
 export interface SpeedUp {
   id: number
@@ -51,8 +51,9 @@ export const useSpeedUpsStore = create<SpeedUpsState>((set, get) => ({
       if (error) throw error
       setSpeedUps(data || [])
     } catch (err: any) {
-      setError(err.message)
-      console.error('Error fetching speed-ups:', err)
+      const errorMessage = err?.message || 'Failed to fetch speed-ups'
+      setError(errorMessage)
+      handleError(err, errorMessage)
     } finally {
       setLoading(false)
     }
@@ -67,15 +68,19 @@ export const useSpeedUpsStore = create<SpeedUpsState>((set, get) => ({
         p_minutes: minutes
       })
       if (error) throw error
-      toast.success(`Speed-up applied! Production accelerated by ${minutes} minutes.`)
+      const { useGameMessageStore } = await import('@/stores/useGameMessageStore')
+      useGameMessageStore.getState().addMessage(
+        'success',
+        `Speed-up applied! Production accelerated by ${minutes} minutes.`
+      )
       await fetchSpeedUps()
       // Refresh factory queue
       const { useFactoryStore } = await import('./useFactoryStore')
       useFactoryStore.getState().fetchQueue()
     } catch (err: any) {
-      setError(err.message)
-      toast.error(`Failed to apply speed-up: ${err.message}`)
-      console.error('Error applying speed-up:', err)
+      const errorMessage = err?.message || 'Failed to apply speed-up'
+      setError(errorMessage)
+      handleError(err, errorMessage)
       throw err
     }
   },
@@ -88,15 +93,19 @@ export const useSpeedUpsStore = create<SpeedUpsState>((set, get) => ({
         p_minutes: minutes
       })
       if (error) throw error
-      toast.success(`Speed-up applied! Crop growth accelerated by ${minutes} minutes.`)
+      const { useGameMessageStore } = await import('@/stores/useGameMessageStore')
+      useGameMessageStore.getState().addMessage(
+        'success',
+        `Speed-up applied! Crop growth accelerated by ${minutes} minutes.`
+      )
       await fetchSpeedUps()
       // Refresh farm plots
       const { useFarmStore } = await import('./useFarmStore')
       useFarmStore.getState().fetchPlots()
     } catch (err: any) {
-      setError(err.message)
-      toast.error(`Failed to apply speed-up: ${err.message}`)
-      console.error('Error applying speed-up:', err)
+      const errorMessage = err?.message || 'Failed to apply speed-up'
+      setError(errorMessage)
+      handleError(err, errorMessage)
       throw err
     }
   },
@@ -108,10 +117,20 @@ export const useSpeedUpsStore = create<SpeedUpsState>((set, get) => ({
         'postgres_changes',
         { event: '*', schema: 'public', table: 'speed_ups' },
         () => {
-          get().fetchSpeedUps()
+          get().fetchSpeedUps().catch((err) => {
+            console.error('Error in subscription callback:', err)
+          })
         }
       )
-      .subscribe()
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          console.log('Subscribed to speed-ups updates')
+        } else if (status === 'CHANNEL_ERROR') {
+          const { setError } = get()
+          setError('Failed to subscribe to real-time updates')
+          console.error('Subscription error for speed-ups')
+        }
+      })
 
     return () => {
       supabase.removeChannel(channel)

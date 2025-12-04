@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { createClient } from '@/lib/supabase/client'
-import toast from 'react-hot-toast'
 import { usePlayerStore } from './usePlayerStore'
+import { handleError } from '@/hooks/useErrorHandler'
 
 export interface SkyportOrder {
   id: number
@@ -56,17 +56,32 @@ export const useSkyportStore = create<SkyportState>((set, get) => ({
         .order('created_at', { ascending: true })
       if (error) throw error
       
-      // Parse JSONB fields
-      const orders = (data || []).map(order => ({
-        ...order,
-        requirements: typeof order.requirements === 'string' ? JSON.parse(order.requirements) : order.requirements,
-        rewards: typeof order.rewards === 'string' ? JSON.parse(order.rewards) : order.rewards
-      }))
+      // Parse JSONB fields and filter out expired orders
+      const now = new Date().getTime()
+      const orders = (data || [])
+        .map(order => {
+          try {
+            return {
+              ...order,
+              requirements: typeof order.requirements === 'string' ? JSON.parse(order.requirements) : order.requirements,
+              rewards: typeof order.rewards === 'string' ? JSON.parse(order.rewards) : order.rewards
+            }
+          } catch (parseError) {
+            console.error('Error parsing order JSON:', parseError, order)
+            return null
+          }
+        })
+        .filter((order): order is SkyportOrder => {
+          if (!order) return false
+          const expiresTime = new Date(order.expires_at).getTime()
+          return !isNaN(expiresTime) && expiresTime > now
+        })
       
       setOrders(orders)
     } catch (err: any) {
-      setError(err.message)
-      console.error('Error fetching skyport orders:', err)
+      const errorMessage = err?.message || 'Failed to fetch skyport orders'
+      setError(errorMessage)
+      handleError(err, errorMessage)
     } finally {
       setLoading(false)
     }
@@ -79,16 +94,27 @@ export const useSkyportStore = create<SkyportState>((set, get) => ({
       if (!user) {
         throw new Error('No authenticated user')
       }
-      const { error } = await supabase.rpc('generate_skyport_orders', {
+      const { error, data } = await supabase.rpc('generate_skyport_orders', {
         p_player_id: user.id
       })
-      if (error) throw error
+      if (error) {
+        console.error('Error generating skyport orders:', error)
+        throw error
+      }
+      // Fetch orders after generation
       await fetchOrders()
-      toast.success('New orders generated!')
+      const { orders } = get()
+      if (orders.length === 0) {
+        console.warn('No orders found after generation - may have hit limit or all expired')
+      }
+      const { useGameMessageStore } = await import('@/stores/useGameMessageStore')
+      useGameMessageStore.getState().addMessage('success', 'New orders generated!')
     } catch (err: any) {
-      setError(err.message)
-      toast.error(`Failed to generate orders: ${err.message}`)
-      console.error('Error generating orders:', err)
+      const errorMessage = err.message || 'An unexpected error occurred while generating orders'
+      console.error('Failed to generate skyport orders:', err)
+      setError(errorMessage)
+      handleError(err, errorMessage)
+      throw err
     }
   },
   fulfillOrder: async (orderId: number) => {
@@ -100,20 +126,26 @@ export const useSkyportStore = create<SkyportState>((set, get) => ({
       })
       if (error) throw error
       
-      const result = data as { success: boolean; crystals_awarded: number; xp_awarded: number }
+      const result = data as { success: boolean; crystals_awarded: number; xp_awarded: number; new_crystal_balance: number }
       
       if (result.success) {
-        // Update player store
-        const playerStore = usePlayerStore.getState()
-        playerStore.addCrystals(result.crystals_awarded)
+        // Use the returned crystal balance directly to avoid race conditions
+        if (result.new_crystal_balance !== null && result.new_crystal_balance !== undefined) {
+          const playerStore = usePlayerStore.getState()
+          playerStore.setCrystals(result.new_crystal_balance)
+        }
         
-        toast.success(`Order fulfilled! +${result.crystals_awarded} crystals, +${result.xp_awarded} XP`)
+        const { useGameMessageStore } = await import('@/stores/useGameMessageStore')
+        useGameMessageStore.getState().addMessage(
+          'success',
+          `Order fulfilled! +${result.crystals_awarded} crystals, +${result.xp_awarded} XP`
+        )
         await fetchOrders()
       }
     } catch (err: any) {
-      setError(err.message)
-      toast.error(`Failed to fulfill order: ${err.message}`)
-      console.error('Error fulfilling order:', err)
+      const errorMessage = err.message || 'An unexpected error occurred while fulfilling the order'
+      setError(errorMessage)
+      handleError(err, errorMessage)
       throw err
     }
   },
@@ -125,10 +157,20 @@ export const useSkyportStore = create<SkyportState>((set, get) => ({
         'postgres_changes',
         { event: '*', schema: 'public', table: 'skyport_orders' },
         () => {
-          get().fetchOrders()
+          get().fetchOrders().catch((err) => {
+            console.error('Error in subscription callback:', err)
+          })
         }
       )
-      .subscribe()
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          console.log('Subscribed to skyport orders')
+        } else if (status === 'CHANNEL_ERROR') {
+          const { setError } = get()
+          setError('Failed to subscribe to real-time updates')
+          console.error('Subscription error for skyport orders')
+        }
+      })
 
     return () => {
       supabase.removeChannel(channel)

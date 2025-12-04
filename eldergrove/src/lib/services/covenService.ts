@@ -22,35 +22,38 @@ export interface CovenWithMembers extends Coven {
   members: CovenMember[];
 }
 
-/**
- * Get coven that the current player belongs to
- */
 export async function getCovenByPlayerId(playerId: string): Promise<CovenWithMembers | null> {
   const supabase = createClient();
   
-  // Get the member record
   const { data: memberData, error: memberError } = await supabase
     .from('coven_members')
     .select('coven_id')
     .eq('player_id', playerId)
     .single();
 
-  if (memberError || !memberData) {
+  if (memberError) {
+    if (memberError.code !== 'PGRST116') {
+      throw memberError;
+    }
+    return null;
+  }
+  if (!memberData) {
     return null;
   }
 
-  // Get the coven
   const { data: coven, error: covenError } = await supabase
     .from('coven')
     .select('*')
     .eq('id', memberData.coven_id)
     .single();
 
-  if (covenError || !coven) {
+  if (covenError) {
+    throw covenError;
+  }
+  if (!coven) {
     return null;
   }
 
-  // Get members
   const { data: members, error: membersError } = await supabase
     .from('coven_members')
     .select('*')
@@ -61,7 +64,6 @@ export async function getCovenByPlayerId(playerId: string): Promise<CovenWithMem
     throw membersError;
   }
 
-  // Fetch usernames for each member
   const membersWithUsernames: CovenMember[] = await Promise.all(
     (members || []).map(async (member) => {
       const { data: profile } = await supabase
@@ -83,9 +85,6 @@ export async function getCovenByPlayerId(playerId: string): Promise<CovenWithMem
   };
 }
 
-/**
- * Create a new coven
- */
 export async function createCoven(name: string, emblem: string | null = null): Promise<Coven> {
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -94,7 +93,6 @@ export async function createCoven(name: string, emblem: string | null = null): P
     throw new Error('Not authenticated');
   }
 
-  // Create coven with current user as leader
   const { data: coven, error: covenError } = await supabase
     .from('coven')
     .insert({
@@ -109,7 +107,6 @@ export async function createCoven(name: string, emblem: string | null = null): P
     throw covenError;
   }
 
-  // Add creator as leader member
   const { error: memberError } = await supabase
     .from('coven_members')
     .insert({
@@ -119,7 +116,6 @@ export async function createCoven(name: string, emblem: string | null = null): P
     });
 
   if (memberError) {
-    // Rollback coven creation
     await supabase.from('coven').delete().eq('id', coven.id);
     throw memberError;
   }
@@ -127,9 +123,6 @@ export async function createCoven(name: string, emblem: string | null = null): P
   return coven;
 }
 
-/**
- * Join a coven
- */
 export async function joinCoven(covenId: string): Promise<void> {
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -138,7 +131,6 @@ export async function joinCoven(covenId: string): Promise<void> {
     throw new Error('Not authenticated');
   }
 
-  // Check if already in a coven
   const { data: existingMember } = await supabase
     .from('coven_members')
     .select('coven_id')
@@ -149,7 +141,6 @@ export async function joinCoven(covenId: string): Promise<void> {
     throw new Error('You are already in a coven');
   }
 
-  // Join the coven
   const { error } = await supabase
     .from('coven_members')
     .insert({
@@ -163,9 +154,6 @@ export async function joinCoven(covenId: string): Promise<void> {
   }
 }
 
-/**
- * Leave current coven
- */
 export async function leaveCoven(): Promise<void> {
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -174,7 +162,6 @@ export async function leaveCoven(): Promise<void> {
     throw new Error('Not authenticated');
   }
 
-  // Check if user is leader
   const { data: member } = await supabase
     .from('coven_members')
     .select('coven_id, role')
@@ -189,7 +176,6 @@ export async function leaveCoven(): Promise<void> {
     throw new Error('Leaders cannot leave their coven. Transfer leadership first or disband the coven.');
   }
 
-  // Leave the coven
   const { error } = await supabase
     .from('coven_members')
     .delete()
@@ -200,9 +186,6 @@ export async function leaveCoven(): Promise<void> {
   }
 }
 
-/**
- * Kick a member from coven (leader only)
- */
 export async function kickMember(memberId: string): Promise<void> {
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -211,7 +194,6 @@ export async function kickMember(memberId: string): Promise<void> {
     throw new Error('Not authenticated');
   }
 
-  // Get member's coven
   const { data: member } = await supabase
     .from('coven_members')
     .select('coven_id')
@@ -222,7 +204,6 @@ export async function kickMember(memberId: string): Promise<void> {
     throw new Error('Member not found');
   }
 
-  // Verify current user is leader
   const { data: coven } = await supabase
     .from('coven')
     .select('leader_id')
@@ -233,12 +214,10 @@ export async function kickMember(memberId: string): Promise<void> {
     throw new Error('Only the coven leader can kick members');
   }
 
-  // Prevent kicking yourself
   if (memberId === user.id) {
     throw new Error('You cannot kick yourself');
   }
 
-  // Kick the member
   const { error } = await supabase
     .from('coven_members')
     .delete()
@@ -250,9 +229,6 @@ export async function kickMember(memberId: string): Promise<void> {
   }
 }
 
-/**
- * Update member role (leader only)
- */
 export async function updateMemberRole(memberId: string, role: 'member' | 'elder' | 'leader'): Promise<void> {
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -261,7 +237,6 @@ export async function updateMemberRole(memberId: string, role: 'member' | 'elder
     throw new Error('Not authenticated');
   }
 
-  // Get member's coven
   const { data: member } = await supabase
     .from('coven_members')
     .select('coven_id')
@@ -272,7 +247,6 @@ export async function updateMemberRole(memberId: string, role: 'member' | 'elder
     throw new Error('Member not found');
   }
 
-  // Verify current user is leader
   const { data: coven } = await supabase
     .from('coven')
     .select('leader_id')
@@ -283,7 +257,6 @@ export async function updateMemberRole(memberId: string, role: 'member' | 'elder
     throw new Error('Only the coven leader can update roles');
   }
 
-  // Update role
   const { error } = await supabase
     .from('coven_members')
     .update({ role })
@@ -295,9 +268,6 @@ export async function updateMemberRole(memberId: string, role: 'member' | 'elder
   }
 }
 
-/**
- * Get coven members
- */
 export async function getCovenMembers(covenId: string): Promise<CovenMember[]> {
   const supabase = createClient();
 
@@ -311,28 +281,32 @@ export async function getCovenMembers(covenId: string): Promise<CovenMember[]> {
     throw error;
   }
 
-  // Fetch usernames for each member
   const membersWithUsernames: CovenMember[] = await Promise.all(
     (members || []).map(async (member) => {
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('username')
-        .eq('id', member.player_id)
-        .single();
-      
-      return {
-        ...member,
-        username: profile?.username || null,
-      };
+      try {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('username')
+          .eq('id', member.player_id)
+          .single();
+        
+        return {
+          ...member,
+          username: profile?.username || null,
+        };
+      } catch (err) {
+        console.warn(`Failed to fetch username for member ${member.player_id}:`, err);
+        return {
+          ...member,
+          username: null,
+        };
+      }
     })
   );
 
   return membersWithUsernames;
 }
 
-/**
- * Search for covens by name
- */
 export async function searchCovens(query: string, limit: number = 20): Promise<Coven[]> {
   const supabase = createClient();
 
@@ -350,9 +324,6 @@ export async function searchCovens(query: string, limit: number = 20): Promise<C
   return covens || [];
 }
 
-/**
- * Get all covens (for browsing)
- */
 export async function getAllCovens(limit: number = 50): Promise<Coven[]> {
   const supabase = createClient();
 

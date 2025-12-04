@@ -110,7 +110,7 @@ BEGIN
         AND grid_x = v_check_x
         AND grid_y = v_check_y
       ) THEN
-        RAISE EXCEPTION 'Grid cell (%%) is already occupied', v_check_x, v_check_y;
+        RAISE EXCEPTION 'Grid cell (%, %) is already occupied', v_check_x, v_check_y;
       END IF;
     END LOOP;
   END LOOP;
