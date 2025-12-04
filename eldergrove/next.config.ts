@@ -4,6 +4,10 @@ const nextConfig: NextConfig = {
   /* config options here */
   reactCompiler: true,
   
+  // Static export for Capacitor mobile builds
+  // This ensures Next.js builds to 'out' directory, matching capacitor.config.ts webDir setting
+  output: 'export',
+  
   // Configure Turbopack to stub Capacitor packages (native-only dependencies)
   turbopack: {
     resolveAlias: {
@@ -16,38 +20,8 @@ const nextConfig: NextConfig = {
     },
   },
   
-  // Add headers for better caching
-  async headers() {
-    return [
-      {
-        source: '/(.*)',
-        headers: [
-          {
-            key: 'Cache-Control',
-            value: 'public, max-age=0, must-revalidate',
-          },
-        ],
-      },
-      {
-        source: '/_next/static/(.*)',
-        headers: [
-          {
-            key: 'Cache-Control',
-            value: 'public, max-age=31536000, immutable',
-          },
-        ],
-      },
-      {
-        source: '/assets/(.*)',
-        headers: [
-          {
-            key: 'Cache-Control',
-            value: 'public, max-age=86400, must-revalidate',
-          },
-        ],
-      },
-    ];
-  },
+  // Note: headers() function is not compatible with static export (output: 'export')
+  // Headers for static sites should be configured at the hosting/CDN level
 };
 
 export default nextConfig;
