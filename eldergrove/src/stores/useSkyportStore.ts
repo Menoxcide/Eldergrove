@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { createClient } from '@/lib/supabase/client'
 import { usePlayerStore } from './usePlayerStore'
 import { handleError } from '@/hooks/useErrorHandler'
+import { crystalTransactionManager } from '@/lib/crystalTransactionManager'
 
 export interface SkyportOrder {
   id: number
@@ -119,22 +120,27 @@ export const useSkyportStore = create<SkyportState>((set, get) => ({
   },
   fulfillOrder: async (orderId: number) => {
     const { fetchOrders, setError } = get()
-    try {
+
+    await crystalTransactionManager.executeCrystalOperation(async () => {
       const supabase = createClient()
       const { error, data } = await supabase.rpc('fulfill_skyport_order', {
         p_order_id: orderId
       })
       if (error) throw error
-      
+
       const result = data as { success: boolean; crystals_awarded: number; xp_awarded: number; new_crystal_balance: number }
-      
+
       if (result.success) {
+        // Validate that the new balance is not negative
+        if (result.new_crystal_balance < 0) {
+          throw new Error('Transaction would result in negative crystal balance')
+        }
         // Use the returned crystal balance directly to avoid race conditions
         if (result.new_crystal_balance !== null && result.new_crystal_balance !== undefined) {
           const playerStore = usePlayerStore.getState()
           playerStore.setCrystals(result.new_crystal_balance)
         }
-        
+
         const { useGameMessageStore } = await import('@/stores/useGameMessageStore')
         useGameMessageStore.getState().addMessage(
           'success',
@@ -142,12 +148,7 @@ export const useSkyportStore = create<SkyportState>((set, get) => ({
         )
         await fetchOrders()
       }
-    } catch (err: any) {
-      const errorMessage = err.message || 'An unexpected error occurred while fulfilling the order'
-      setError(errorMessage)
-      handleError(err, errorMessage)
-      throw err
-    }
+    }, `Fulfill skyport order ${orderId}`)
   },
   subscribeToOrders: () => {
     const supabase = createClient()

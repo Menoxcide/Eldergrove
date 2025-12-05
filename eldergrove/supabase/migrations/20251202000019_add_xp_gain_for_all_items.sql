@@ -550,6 +550,7 @@ DECLARE
   v_seller_profit integer;
   v_result jsonb;
   v_xp_gained integer;
+  v_new_crystal_balance bigint;
 BEGIN
   -- Get listing
   SELECT * INTO v_listing
@@ -592,6 +593,11 @@ BEGIN
   SET crystals = crystals - v_total_cost
   WHERE id = v_buyer_id;
 
+  -- Get new crystal balance
+  SELECT crystals INTO v_new_crystal_balance
+  FROM public.profiles
+  WHERE id = v_buyer_id;
+
   -- Add profit to seller
   UPDATE public.profiles
   SET crystals = crystals + v_seller_profit
@@ -624,12 +630,13 @@ BEGIN
     'item_id', v_listing.item_id,
     'quantity', v_listing.quantity,
     'cost', v_total_cost,
-    'xp_gained', v_xp_gained
+    'xp_gained', v_xp_gained,
+    'new_crystal_balance', v_new_crystal_balance
   ) INTO v_result;
 
   RETURN v_result;
 END;
 $$;
 
-COMMENT ON FUNCTION public.purchase_listing(integer) IS 'Purchase a market listing: transfers items and crystals, grants XP to buyer (one-third of harvest XP). Returns success status, item details, cost, and XP gained.';
+COMMENT ON FUNCTION public.purchase_listing(integer) IS 'Purchase a market listing: transfers items and crystals, grants XP to buyer (one-third of harvest XP). Returns success status, item details, cost, XP gained, and new crystal balance.';
 

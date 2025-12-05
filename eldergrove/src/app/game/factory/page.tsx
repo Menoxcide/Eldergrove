@@ -54,9 +54,18 @@ export default function FactoryPage() {
     return unsubscribe;
   }, [fetchFactories, fetchQueue, fetchRecipes, fetchInventory, getSlotInfo, subscribeToQueueUpdates]);
 
-  // Auto-collect ready items when page loads (only once)
+  // Auto-collect ready items when they become available
   useEffect(() => {
-    if (hasAutoCollected.current || loading) return;
+    if (loading) return;
+    
+    // Reset the flag when queue is completely empty to allow retrying when new production completes
+    if (queue.length === 0) {
+      hasAutoCollected.current = false;
+      return;
+    }
+    
+    // Skip if we've already attempted auto-collect for the current queue state
+    if (hasAutoCollected.current) return;
     
     const autoCollectReady = async () => {
       const readySlots = queue.filter(
@@ -64,7 +73,9 @@ export default function FactoryPage() {
       );
       
       if (readySlots.length > 0) {
+        // Set flag before collecting to prevent duplicate attempts
         hasAutoCollected.current = true;
+        
         // Collect all ready items
         for (const readyItem of readySlots) {
           try {
@@ -79,10 +90,8 @@ export default function FactoryPage() {
       }
     };
 
-    // Only auto-collect if we have queue data and haven't already done it
-    if (queue.length > 0) {
-      autoCollectReady();
-    }
+    // Auto-collect ready items
+    autoCollectReady();
   }, [queue, loading, collectFactory]); // Only run when queue or loading changes
 
   useEffect(() => {

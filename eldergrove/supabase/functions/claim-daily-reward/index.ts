@@ -11,6 +11,7 @@ interface ClaimResponse {
   message: string;
   crystalsAwarded?: number;
   alreadyClaimed?: boolean;
+  new_crystal_balance?: number;
 }
 
 serve(async (_req) => {
@@ -123,11 +124,12 @@ serve(async (_req) => {
     }
     
     return new Response(
-      JSON.stringify({ 
-        success: true, 
+      JSON.stringify({
+        success: true,
         message: `Successfully claimed ${crystalsToAdd} crystals!`,
         crystalsAwarded: crystalsToAdd,
-        alreadyClaimed: false
+        alreadyClaimed: false,
+        new_crystal_balance: updatedProfile.crystals
       }),
       {
         headers: {

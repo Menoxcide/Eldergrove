@@ -27,6 +27,10 @@ jest.mock('@/lib/itemUtils', () => ({
       1: '🌾', // wheat
       2: '🥕', // carrot
       8: '🍞', // bread
+      11: '🍓', // berry
+      12: '🌿', // herbs
+      13: '🍄', // magic_mushroom
+      14: '🌸', // enchanted_flower
       30: '⚔️', // iron_sword
       113: '🐔', // chicken
     };
@@ -37,6 +41,10 @@ jest.mock('@/lib/itemUtils', () => ({
       1: 'Wheat',
       2: 'Carrot',
       8: 'Bread',
+      11: 'Berry',
+      12: 'Herbs',
+      13: 'Magic Mushroom',
+      14: 'Enchanted Flower',
       30: 'Iron Sword',
       113: 'Chicken',
     };
@@ -47,6 +55,10 @@ jest.mock('@/lib/itemUtils', () => ({
       1: 'Wheat',
       2: 'Carrot',
       8: 'Bread',
+      11: 'Berry',
+      12: 'Herbs',
+      13: 'Magic Mushroom',
+      14: 'Enchanted Flower',
       30: 'Iron Sword',
       113: 'Chicken +1',
     };
@@ -57,6 +69,10 @@ jest.mock('@/lib/itemUtils', () => ({
       1: '🌾',
       2: '🥕',
       8: '🍞',
+      11: '🍓',
+      12: '🌿',
+      13: '🍄',
+      14: '🌸',
       30: '⚔️',
       113: '🐔',
     };
@@ -359,6 +375,130 @@ describe('GameMessageLog Component - Item Name Display', () => {
       expect(screen.getByText('Task completed successfully!')).toBeInTheDocument();
       // Should not have collection-specific elements
       expect(screen.queryByText('Items Collected:')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('Factory Production Item Display (Post-Migration)', () => {
+    test('displays correct item names for berry collection', () => {
+      const mockMessages = [
+        {
+          id: 'berry-test',
+          type: 'collection' as const,
+          content: 'Collection Complete!',
+          timestamp: Date.now(),
+          items: { 'berry': 1 },
+        },
+      ];
+
+      mockUseGameMessageStore.mockReturnValue({
+        messages: mockMessages,
+        removeMessage: jest.fn(),
+        clearMessages: jest.fn(),
+      });
+
+      render(<GameMessageLog />);
+
+      expect(screen.getByText('1 Berry')).toBeInTheDocument();
+      expect(screen.getByText('🍓')).toBeInTheDocument();
+    });
+
+    test('displays correct item names for herbs collection', () => {
+      const mockMessages = [
+        {
+          id: 'herbs-test',
+          type: 'collection' as const,
+          content: 'Collection Complete!',
+          timestamp: Date.now(),
+          items: { 'herbs': 1 },
+        },
+      ];
+
+      mockUseGameMessageStore.mockReturnValue({
+        messages: mockMessages,
+        removeMessage: jest.fn(),
+        clearMessages: jest.fn(),
+      });
+
+      render(<GameMessageLog />);
+
+      expect(screen.getByText('1 Herbs')).toBeInTheDocument();
+      expect(screen.getByText('🌿')).toBeInTheDocument();
+    });
+
+    test('displays correct item names for magic mushroom collection', () => {
+      const mockMessages = [
+        {
+          id: 'magic-mushroom-test',
+          type: 'collection' as const,
+          content: 'Collection Complete!',
+          timestamp: Date.now(),
+          items: { 'magic_mushroom': 1 },
+        },
+      ];
+
+      mockUseGameMessageStore.mockReturnValue({
+        messages: mockMessages,
+        removeMessage: jest.fn(),
+        clearMessages: jest.fn(),
+      });
+
+      render(<GameMessageLog />);
+
+      expect(screen.getByText('1 Magic Mushroom')).toBeInTheDocument();
+      expect(screen.getByText('🍄')).toBeInTheDocument();
+    });
+
+    test('displays correct item names for enchanted flower collection', () => {
+      const mockMessages = [
+        {
+          id: 'enchanted-flower-test',
+          type: 'collection' as const,
+          content: 'Collection Complete!',
+          timestamp: Date.now(),
+          items: { 'enchanted_flower': 1 },
+        },
+      ];
+
+      mockUseGameMessageStore.mockReturnValue({
+        messages: mockMessages,
+        removeMessage: jest.fn(),
+        clearMessages: jest.fn(),
+      });
+
+      render(<GameMessageLog />);
+
+      expect(screen.getByText('1 Enchanted Flower')).toBeInTheDocument();
+      expect(screen.getByText('🌸')).toBeInTheDocument();
+    });
+
+    test('displays multiple production items correctly', () => {
+      const mockMessages = [
+        {
+          id: 'multi-production-test',
+          type: 'collection' as const,
+          content: 'Collection Complete!',
+          timestamp: Date.now(),
+          items: {
+            'berry': 2,
+            'herbs': 1,
+            'magic_mushroom': 3,
+            'enchanted_flower': 1
+          },
+        },
+      ];
+
+      mockUseGameMessageStore.mockReturnValue({
+        messages: mockMessages,
+        removeMessage: jest.fn(),
+        clearMessages: jest.fn(),
+      });
+
+      render(<GameMessageLog />);
+
+      expect(screen.getByText('2 Berry')).toBeInTheDocument();
+      expect(screen.getByText('1 Herbs')).toBeInTheDocument();
+      expect(screen.getByText('3 Magic Mushroom')).toBeInTheDocument();
+      expect(screen.getByText('1 Enchanted Flower')).toBeInTheDocument();
     });
   });
 

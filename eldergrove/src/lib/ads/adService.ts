@@ -141,6 +141,10 @@ export async function showRewardedAd(): Promise<void> {
       : (ADMOB_REWARDED_AD_UNIT_ID_ANDROID || ADMOB_TEST_REWARDED_AD_UNIT_ID);
 
     return new Promise<void>((resolve, reject) => {
+      if (!AdMob) {
+        throw new Error('AdMob not available');
+      }
+
       const rewardListener = AdMob.addListener('onRewarded', (reward: { type: string; amount: number; adUnitId: string }) => {
         console.log('Ad reward granted:', reward);
         rewardListener.remove();

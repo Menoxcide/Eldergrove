@@ -1,11 +1,13 @@
 import { createClient } from '@/lib/supabase/client';
 import { handleError } from '@/hooks/useErrorHandler';
+import { crystalTransactionManager } from '@/lib/crystalTransactionManager';
 
 export interface DailyRewardResponse {
   success: boolean;
   message: string;
   crystalsAwarded?: number;
   alreadyClaimed?: boolean;
+  new_crystal_balance?: number;
 }
 
 /**
@@ -13,85 +15,35 @@ export interface DailyRewardResponse {
  * @returns Promise resolving to the response from the edge function
  */
 export async function claimDailyReward(): Promise<DailyRewardResponse> {
-  try {
+  let response: DailyRewardResponse;
+
+  await crystalTransactionManager.executeCrystalOperation(async (): Promise<void> => {
+    const { usePlayerStore } = await import('@/stores/usePlayerStore');
     const supabase = createClient();
 
-    // Get the current session
-    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    // Call the edge function instead of direct database operations
+    const { data, error } = await supabase.functions.invoke('claim-daily-reward');
 
-    if (sessionError || !session) {
-      throw new Error('No active session found');
+    if (error) {
+      throw new Error(error.message || 'Failed to claim daily reward');
     }
 
-    const userId = session.user.id;
-    const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
+    response = data as DailyRewardResponse;
 
-    // Check if user has already claimed today
-    const { data: profile, error: profileError } = await supabase
-      .from('profiles')
-      .select('last_claimed_date, crystals')
-      .eq('id', userId)
-      .single();
-
-    if (profileError) {
-      throw new Error('Failed to fetch profile data');
-    }
-
-    // If already claimed today, return appropriate response
-    if (profile.last_claimed_date === today) {
-      const response: DailyRewardResponse = {
-        success: true,
-        message: 'Daily reward already claimed today',
-        alreadyClaimed: true
-      };
-
-      const { useGameMessageStore } = await import('@/stores/useGameMessageStore');
-      useGameMessageStore.getState().addMessage('success', response.message);
-      return response;
-    }
-
-    // User hasn't claimed today, so award 500 crystals
-    const crystalsToAdd = 500;
-    const newCrystalsTotal = profile.crystals + crystalsToAdd;
-
-    // Update profile with new crystals and last claimed date
-    const { error: updateError } = await supabase
-      .from('profiles')
-      .update({
-        crystals: newCrystalsTotal,
-        last_claimed_date: today
-      })
-      .eq('id', userId);
-
-    if (updateError) {
-      throw new Error('Failed to update profile with daily reward');
-    }
-
-    const response: DailyRewardResponse = {
-      success: true,
-      message: `Successfully claimed ${crystalsToAdd} crystals!`,
-      crystalsAwarded: crystalsToAdd,
-      alreadyClaimed: false
-    };
-
-    // Refresh player profile to ensure store is in sync
-    try {
-      const { usePlayerStore } = await import('@/stores/usePlayerStore');
-      await usePlayerStore.getState().fetchPlayerProfile();
-    } catch (profileError) {
-      console.warn('Failed to refresh player profile after daily reward:', profileError);
+    if (response.success && !response.alreadyClaimed) {
+      // Use the returned crystal balance directly to avoid race conditions
+      if (response.new_crystal_balance !== null && response.new_crystal_balance !== undefined) {
+        // Validate that the new balance is not negative
+        if (response.new_crystal_balance < 0) {
+          throw new Error('Daily reward would result in negative crystal balance');
+        }
+        usePlayerStore.getState().setCrystals(response.new_crystal_balance);
+      }
     }
 
     const { useGameMessageStore } = await import('@/stores/useGameMessageStore');
     useGameMessageStore.getState().addMessage('success', response.message);
+  }, 'Claim daily reward');
 
-    return response;
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Failed to claim daily reward';
-    handleError(error, errorMessage);
-    return {
-      success: false,
-      message: errorMessage,
-    };
-  }
+  return response!;
 }

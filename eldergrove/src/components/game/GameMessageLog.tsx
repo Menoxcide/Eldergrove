@@ -82,8 +82,8 @@ const GameMessageLog = () => {
     'pumpkin': 6,
     'berry': 11,
     'herbs': 12,
-    'magic_mushroom': 9,
-    'enchanted_flower': 10,
+    'magic_mushroom': 13,
+    'enchanted_flower': 14,
     'bread': 8,
     'vegetable_stew': 12,
     'corn_bread': 13,
@@ -132,15 +132,15 @@ const GameMessageLog = () => {
     // Prefer itemIds (item_id -> quantity) over items (name -> quantity)
     const itemIdEntries = message.itemIds ? Object.entries(message.itemIds).map(([id, qty]) => [parseInt(id, 10), qty] as [number, number]) : [];
     const itemNameEntries = message.items ? Object.entries(message.items) : [];
-    
+
     // Combine both formats, preferring itemIds
     const allItems: Array<{ itemId: number; quantity: number }> = [];
-    
+
     // Add items from itemIds (preferred format)
     itemIdEntries.forEach(([itemId, quantity]) => {
       allItems.push({ itemId, quantity });
     });
-    
+
     // Add items from items (legacy format), but skip if already in itemIds
     itemNameEntries.forEach(([itemName, quantity]) => {
       const itemId = extractItemIdFromKey(itemName);

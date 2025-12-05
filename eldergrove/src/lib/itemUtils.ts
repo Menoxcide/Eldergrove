@@ -111,18 +111,23 @@ export const getItemName = (itemId: number): string => {
 export type ItemCategory = 'seeds' | 'crops' | 'production' | 'ore' | 'equipment' | 'other';
 
 export const getItemCategory = (itemId: number): ItemCategory => {
-  // Seeds: 100-110 (will be updated when seed system is migrated)
-  if (itemId >= 100 && itemId <= 110) {
+  // Seeds: 100-110 (crops 1-10) and 111-114 (crops 11-14)
+  if ((itemId >= 100 && itemId <= 110) || (itemId >= 111 && itemId <= 114)) {
     return 'seeds';
   }
-  // Crops: 1-10 (harvested crops)
-  if (itemId >= 1 && itemId <= 10) {
+  
+  // Crops: 1-6 (Wheat, Carrot, Potato, Tomato, Corn, Pumpkin) and 11-14 (Berry, Herbs, Magic Mushroom, Enchanted Flower)
+  const cropIds = [1, 2, 3, 4, 5, 6, 11, 12, 13, 14];
+  if (cropIds.includes(itemId)) {
     return 'crops';
   }
-  // Production items: 11-19
-  if (itemId >= 11 && itemId <= 19) {
+  
+  // Production items: 7-10 (Minor Healing Potion, Bread, Magic Essence, Enchanted Seeds) and 15-19 (Herbal Tea, Magic Potion, Fruit Salad, Crystals)
+  const productionIds = [7, 8, 9, 10, 15, 16, 17, 18, 19];
+  if (productionIds.includes(itemId)) {
     return 'production';
   }
+  
   // Ore: 20-29
   if (itemId >= 20 && itemId <= 29) {
     return 'ore';
@@ -134,24 +139,14 @@ export const getItemCategory = (itemId: number): ItemCategory => {
   return 'other';
 };
 
-export const getCategoryName = (category: ItemCategory): string => {
-  const names: Record<ItemCategory, string> = {
-    seeds: 'Seeds',
-    crops: 'Crops',
-    production: 'Production Items',
-    ore: 'Ore & Minerals',
-    equipment: 'Equipment',
-    other: 'Other'
-  };
-  return names[category];
-};
-
 export const isSeed = (itemId: number): boolean => {
   return itemId >= 100 && itemId <= 110;
 };
 
 export const isCrop = (itemId: number): boolean => {
-  return itemId >= 1 && itemId <= 10;
+  // Crops: 1-6 (Wheat, Carrot, Potato, Tomato, Corn, Pumpkin) and 11-14 (Berry, Herbs, Magic Mushroom, Enchanted Flower)
+  const cropIds = [1, 2, 3, 4, 5, 6, 11, 12, 13, 14];
+  return cropIds.includes(itemId);
 };
 
 export const isOre = (itemId: number): boolean => {
@@ -159,7 +154,9 @@ export const isOre = (itemId: number): boolean => {
 };
 
 export const isProductionItem = (itemId: number): boolean => {
-  return itemId >= 11 && itemId <= 19;
+  // Production items: 7-10 (Minor Healing Potion, Bread, Magic Essence, Enchanted Seeds) and 15-19 (Herbal Tea, Magic Potion, Fruit Salad, Crystals)
+  const productionIds = [7, 8, 9, 10, 15, 16, 17, 18, 19];
+  return productionIds.includes(itemId);
 };
 
 export const isEquipment = (itemId: number): boolean => {
@@ -265,5 +262,18 @@ export const getItemIconWithAnimal = (itemId: number): string => {
     return getAnimalIcon(animalTypeId);
   }
   return getItemIcon(itemId);
+};
+
+// Armory type name formatting - converts technical names to user-friendly display names
+export const getArmoryTypeName = (armoryType: string): string => {
+  const armoryTypeNames: Record<string, string> = {
+    basic_forge: 'Basic Forge',
+    // Add more armory types here as they're added to the game
+  };
+  
+  return armoryTypeNames[armoryType] || armoryType
+    .split('_')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
 };
 

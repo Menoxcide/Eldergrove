@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/client'
 import { playCollectSound } from '@/lib/audio'
 import { handleError } from '@/hooks/useErrorHandler'
 import { ITEM_NAME_TO_ID } from '@/lib/itemMappings'
+import { crystalTransactionManager } from '@/lib/crystalTransactionManager'
 
 interface Factory {
   player_id: string
@@ -107,13 +108,15 @@ export const useFactoryStore = create<FactoryState>((set, get) => ({
   },
   purchaseFactorySlot: async () => {
     const { getSlotInfo, setError } = get()
-    try {
+
+    await crystalTransactionManager.executeCrystalOperation(async () => {
+      const { usePlayerStore } = await import('@/stores/usePlayerStore')
       const supabase = createClient()
       const { data, error } = await supabase.rpc('purchase_factory_slot')
       if (error) {
         throw error
       }
-      
+
       const result: PurchaseSlotResult = data
       if (result.success) {
         const { useGameMessageStore } = await import('@/stores/useGameMessageStore')
@@ -122,16 +125,9 @@ export const useFactoryStore = create<FactoryState>((set, get) => ({
           `Purchased factory slot for ${result.cost_paid} crystals! Max slots: ${result.new_max_slots}`
         )
         await getSlotInfo()
-        const { usePlayerStore } = await import('@/stores/usePlayerStore')
         await usePlayerStore.getState().fetchPlayerProfile()
       }
-    } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : 'An unexpected error occurred while purchasing factory slot'
-      const contextualMessage = `Failed to purchase factory slot: ${errorMessage}`
-      setError(contextualMessage)
-      handleError(err, contextualMessage)
-      throw err
-    }
+    }, 'Purchase factory slot')
   },
   fetchFactories: async () => {
     const { setFactories, setLoading, setError } = get()
@@ -247,7 +243,9 @@ export const useFactoryStore = create<FactoryState>((set, get) => ({
   },
   collectFactory: async (slot: number) => {
     const { fetchQueue, setError } = get()
-    try {
+
+    await crystalTransactionManager.executeCrystalOperation(async () => {
+      const { usePlayerStore } = await import('@/stores/usePlayerStore')
       const supabase = createClient()
       const { data: result, error } = await supabase.rpc('collect_factory', {
         p_slot: slot
@@ -262,22 +260,22 @@ export const useFactoryStore = create<FactoryState>((set, get) => ({
         })
         throw error
       }
-      
+
       // Parse the jsonb response
       const collectionResult: CollectFactoryResult = result
-      
-      // Refresh player profile to update XP, level, and crystals (XP is granted by collect_factory)
-      const { usePlayerStore } = await import('@/stores/usePlayerStore')
+
+      // Validate that the new balance is not negative
+      if (collectionResult.new_crystal_balance < 0) {
+        throw new Error('Collection would result in negative crystal balance')
+      }
       // Update crystal balance from the response
       if (collectionResult.new_crystal_balance !== null && collectionResult.new_crystal_balance !== undefined) {
         usePlayerStore.getState().setCrystals(collectionResult.new_crystal_balance)
       }
-      // Fetch full profile to update XP and level
-      await usePlayerStore.getState().fetchPlayerProfile()
-      
+
       await fetchQueue()
       playCollectSound()
-      
+
       // Show visual feedback using game message system
       const { useGameMessageStore } = await import('@/stores/useGameMessageStore')
       useGameMessageStore.getState().addMessage(
@@ -289,13 +287,7 @@ export const useFactoryStore = create<FactoryState>((set, get) => ({
           xp: collectionResult.xp_gained > 0 ? collectionResult.xp_gained : undefined,
         }
       )
-    } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : `An unexpected error occurred while collecting factory output from slot ${slot}`
-      const contextualMessage = `Failed to collect factory output from slot ${slot}: ${errorMessage}`
-      setError(contextualMessage)
-      handleError(err, contextualMessage)
-      throw err
-    }
+    }, `Collect factory slot ${slot}`)
   },
   fetchRecipes: async () => {
     const { setRecipes, setLoading, setError } = get()
@@ -360,7 +352,9 @@ export const useFactoryStore = create<FactoryState>((set, get) => ({
   },
   upgradeFactory: async (factoryType: string) => {
     const { fetchFactories, fetchInventory, setError } = get()
-    try {
+
+    await crystalTransactionManager.executeCrystalOperation(async () => {
+      const { usePlayerStore } = await import('./usePlayerStore')
       const supabase = createClient()
       const { data, error } = await supabase.rpc('upgrade_factory', {
         p_factory_type: factoryType
@@ -368,9 +362,9 @@ export const useFactoryStore = create<FactoryState>((set, get) => ({
       if (error) {
         throw error
       }
-      
+
       const result: UpgradeFactoryResult = data
-      
+
       if (result.success) {
         const { useGameMessageStore } = await import('@/stores/useGameMessageStore')
         useGameMessageStore.getState().addMessage(
@@ -379,15 +373,9 @@ export const useFactoryStore = create<FactoryState>((set, get) => ({
         )
         await fetchFactories()
         await fetchInventory()
-        const { usePlayerStore } = await import('./usePlayerStore')
         await usePlayerStore.getState().fetchPlayerProfile()
       }
-    } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to upgrade factory'
-      setError(errorMessage)
-      handleError(err, errorMessage)
-      throw err
-    }
+    }, `Upgrade factory ${factoryType}`)
   },
   canCraftRecipe: (recipe: Recipe) => {
     const { inventory } = get()

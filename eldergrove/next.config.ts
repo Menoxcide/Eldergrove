@@ -2,7 +2,7 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   /* config options here */
-  reactCompiler: true,
+  // reactCompiler: true, // Temporarily disabled to test stability
   
   // Static export for Capacitor mobile builds
   // This ensures Next.js builds to 'out' directory, matching capacitor.config.ts webDir setting

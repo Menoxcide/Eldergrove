@@ -8,6 +8,7 @@ import { Skeleton } from '@/components/ui/LoadingSkeleton';
 import Tooltip from '@/components/ui/Tooltip';
 import { getActionTooltip } from '@/lib/tooltipUtils';
 import { usePlayerStore } from '@/stores/usePlayerStore';
+import { getArmoryTypeName } from '@/lib/itemUtils';
 
 export default function ArmoryPage() {
   const {
@@ -113,7 +114,7 @@ export default function ArmoryPage() {
                   key={armory.armory_type}
                   content={[
                     {
-                      title: armory.armory_type,
+                      title: getArmoryTypeName(armory.armory_type),
                       icon: '⚔️',
                       color: 'blue' as const,
                       content: (
@@ -141,7 +142,7 @@ export default function ArmoryPage() {
                         : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
                     }`}
                   >
-                    {armory.armory_type} (Lv.{armory.level})
+                    {getArmoryTypeName(armory.armory_type)} (Lv.{armory.level})
                   </button>
                 </Tooltip>
               ))}
@@ -152,7 +153,7 @@ export default function ArmoryPage() {
                   content={getActionTooltip(
                     isMaxLevel
                       ? 'Max Level Reached'
-                      : `Upgrade ${selectedArmory}`,
+                      : `Upgrade ${getArmoryTypeName(selectedArmory)}`,
                     undefined,
                     isMaxLevel
                       ? ['Armory is at maximum level', 'No further upgrades available']
@@ -171,7 +172,7 @@ export default function ArmoryPage() {
                   >
                     {isMaxLevel
                       ? 'Max Level'
-                      : `Upgrade ${selectedArmory}`}
+                      : `Upgrade ${getArmoryTypeName(selectedArmory)}`}
                   </button>
                 </Tooltip>
               </div>
@@ -225,7 +226,7 @@ export default function ArmoryPage() {
         {showUpgradeModal && selectedArmory && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowUpgradeModal(false)}>
             <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-2xl p-6 max-w-md w-full mx-4 border-2 border-slate-700" onClick={(e) => e.stopPropagation()}>
-              <h3 className="text-2xl font-bold text-white mb-4">Upgrade {selectedArmory}</h3>
+              <h3 className="text-2xl font-bold text-white mb-4">Upgrade {getArmoryTypeName(selectedArmory)}</h3>
               <div className="mb-4">
                 <p className="text-slate-300 mb-2">Current Level: {armoryLevel}</p>
                 <p className="text-slate-300 mb-2">New Level: {armoryLevel + 1}</p>

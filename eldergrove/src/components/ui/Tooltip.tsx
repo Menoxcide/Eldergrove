@@ -209,10 +209,9 @@ const Tooltip: React.FC<TooltipProps> = ({
     return <div className="text-slate-200 text-sm leading-relaxed">{content}</div>;
   };
 
-  const childProps = children.props;
+  const childProps = children.props as Record<string, any>;
   const originalRef = (children as React.ReactElement & { ref?: React.Ref<HTMLElement> }).ref;
-  const childWithRef = React.cloneElement(children, {
-    ...childProps,
+  const childWithRef = React.cloneElement<any>(children, {
     ref: (node: HTMLElement | null) => {
       triggerRef.current = node;
       if (typeof originalRef === 'function') {

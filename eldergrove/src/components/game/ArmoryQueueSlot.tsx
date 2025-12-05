@@ -7,6 +7,7 @@ import { useArmoryStore } from '@/stores/useArmoryStore';
 import { createClient } from '@/lib/supabase/client';
 import Tooltip from '@/components/ui/Tooltip';
 import { getActionTooltip } from '@/lib/tooltipUtils';
+import { getArmoryTypeName } from '@/lib/itemUtils';
 
 interface ArmoryQueueSlotProps {
   queueItem: ArmoryQueueItem;
@@ -90,7 +91,7 @@ const ArmoryQueueSlot: React.FC<ArmoryQueueSlotProps> = ({ queueItem }) => {
             </div>
             <div className="flex items-center justify-between">
               <span>Armory:</span>
-              <span className="text-slate-300 capitalize">{armory_type}</span>
+              <span className="text-slate-300">{getArmoryTypeName(armory_type)}</span>
             </div>
             {isReady ? (
               <div className="border-t border-slate-700 pt-2 mt-2">

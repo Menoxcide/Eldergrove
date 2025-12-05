@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { createClient } from '@/lib/supabase/client'
 import { handleError } from '@/hooks/useErrorHandler'
+import { crystalTransactionManager } from '@/lib/crystalTransactionManager'
 
 export interface MarketListing {
   id: number
@@ -122,35 +123,45 @@ export const useMarketBoxStore = create<MarketBoxState>((set, get) => ({
     }
   },
   purchaseListing: async (listingId: number) => {
-    const { fetchListings, setError } = get()
-    try {
+    const { fetchListings, setError, listings } = get()
+
+    await crystalTransactionManager.executeCrystalOperation(async () => {
+      const { usePlayerStore } = await import('./usePlayerStore')
+
+      // Find the listing to validate cost
+      const listing = listings.find(l => l.id === listingId)
+      if (!listing) {
+        throw new Error('Listing not found')
+      }
+
       const supabase = createClient()
       const { data, error } = await supabase.rpc('purchase_listing', {
         p_listing_id: listingId
       })
       if (error) throw error
 
-      const result = data as { success: boolean; item_id: number; quantity: number; cost: number }
-      
+      const result = data as { success: boolean; item_id: number; quantity: number; cost: number; new_crystal_balance: number }
+
       if (result.success) {
+        // Validate that the new balance is not negative
+        if (result.new_crystal_balance < 0) {
+          throw new Error('Transaction would result in negative crystal balance')
+        }
+        // Use the returned crystal balance directly to avoid race conditions
+        if (result.new_crystal_balance !== null && result.new_crystal_balance !== undefined) {
+          usePlayerStore.getState().setCrystals(result.new_crystal_balance)
+        }
         const { useGameMessageStore } = await import('@/stores/useGameMessageStore')
         useGameMessageStore.getState().addMessage(
           'success',
           `Purchased ${result.quantity} items for ${result.cost} crystals!`
         )
         await fetchListings()
-        // Refresh inventory and crystals
+        // Refresh inventory
         const { useInventoryStore } = await import('./useInventoryStore')
         useInventoryStore.getState().fetchInventory()
-        const { usePlayerStore } = await import('./usePlayerStore')
-        usePlayerStore.getState().fetchPlayerProfile()
       }
-    } catch (err: any) {
-      const errorMessage = err?.message || 'Failed to purchase listing'
-      setError(errorMessage)
-      handleError(err, errorMessage)
-      throw err
-    }
+    }, `Purchase market listing ${listingId}`)
   },
   cancelListing: async (listingId: number) => {
     const { fetchMyListings, fetchListings, setError } = get()
