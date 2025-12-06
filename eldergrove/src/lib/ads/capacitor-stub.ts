@@ -1,6 +1,4 @@
 // Stub module for Capacitor packages in web builds
-// These are only available in native environments
-// This stub prevents build errors when Capacitor packages are dynamically imported
 
 export const Capacitor = {
   isNativePlatform: () => false,

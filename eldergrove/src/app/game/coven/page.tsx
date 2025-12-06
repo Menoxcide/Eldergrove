@@ -43,6 +43,9 @@ export default function CovenPage() {
   const [covenName, setCovenName] = useState('');
   const [covenEmblem, setCovenEmblem] = useState('🌟');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showCreateTaskModal, setShowCreateTaskModal] = useState(false);
+  const [taskName, setTaskName] = useState('');
+  const [taskDescription, setTaskDescription] = useState('');
   const { showError } = useErrorHandler();
 
   const emblems = ['🌟', '⚡', '🔥', '💎', '🌙', '☀️', '🌊', '🌿', '⚔️', '🛡️', '🎭', '🔮'];
@@ -82,29 +85,19 @@ export default function CovenPage() {
       return;
     }
     setIsSubmitting(true);
-    try {
-      await createCoven(covenName.trim(), covenEmblem);
-      setShowCreateForm(false);
-      setCovenName('');
-      setCovenEmblem('🌟');
-    } catch (err) {
-      // Error already handled in store
-    } finally {
-      setIsSubmitting(false);
-    }
+    await createCoven(covenName.trim(), covenEmblem);
+    setShowCreateForm(false);
+    setCovenName('');
+    setCovenEmblem('🌟');
+    setIsSubmitting(false);
   };
 
   const handleJoinCoven = async (covenId: string) => {
     setIsSubmitting(true);
-    try {
-      await joinCoven(covenId);
-      setShowBrowse(false);
-      setSearchQuery('');
-    } catch (err) {
-      // Error already handled in store
-    } finally {
-      setIsSubmitting(false);
-    }
+    await joinCoven(covenId);
+    setShowBrowse(false);
+    setSearchQuery('');
+    setIsSubmitting(false);
   };
 
   const handleLeaveCoven = async () => {
@@ -112,13 +105,8 @@ export default function CovenPage() {
       return;
     }
     setIsSubmitting(true);
-    try {
-      await leaveCoven();
-    } catch (err) {
-      // Error already handled in store
-    } finally {
-      setIsSubmitting(false);
-    }
+    await leaveCoven();
+    setIsSubmitting(false);
   };
 
   const handleKickMember = async (memberId: string, memberName: string) => {
@@ -126,13 +114,8 @@ export default function CovenPage() {
       return;
     }
     setIsSubmitting(true);
-    try {
-      await kickMember(memberId);
-    } catch (err) {
-      // Error already handled in store
-    } finally {
-      setIsSubmitting(false);
-    }
+    await kickMember(memberId);
+    setIsSubmitting(false);
   };
 
   const handlePromoteMember = async (memberId: string, currentRole: string) => {
@@ -141,13 +124,8 @@ export default function CovenPage() {
       return;
     }
     setIsSubmitting(true);
-    try {
-      await updateMemberRole(memberId, newRole as 'member' | 'elder' | 'leader');
-    } catch (err) {
-      // Error already handled in store
-    } finally {
-      setIsSubmitting(false);
-    }
+    await updateMemberRole(memberId, newRole as 'member' | 'elder' | 'leader');
+    setIsSubmitting(false);
   };
 
   const isLeader = currentCoven?.leader_id === playerId;
@@ -285,18 +263,9 @@ export default function CovenPage() {
               {(isLeader || isElder) && (
                 <button
                   onClick={() => {
-                    // Show create task modal
-                    const name = prompt('Task name:');
-                    if (name) {
-                      const desc = prompt('Task description:');
-                      if (desc) {
-                        const objectives = [
-                          { type: 'produce', target: 100, item: 'bread', description: 'Produce 100 bread' }
-                        ];
-                        const rewards = { shared_crystals: 500 };
-                        createTask(currentCoven.id, name, desc, objectives, rewards).catch(console.error);
-                      }
-                    }
+                    setShowCreateTaskModal(true);
+                    setTaskName('');
+                    setTaskDescription('');
                   }}
                   className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-lg font-semibold transition-colors"
                 >
@@ -317,11 +286,12 @@ export default function CovenPage() {
                   
                   // Calculate total progress across all members
                   progress.forEach(p => {
-                    p.contribution.forEach((obj: any) => {
-                      if (!totalProgress[obj.type]) {
-                        totalProgress[obj.type] = 0;
+                    p.contribution.forEach((obj) => {
+                      const type = obj.type;
+                      if (!totalProgress[type]) {
+                        totalProgress[type] = 0;
                       }
-                      totalProgress[obj.type] += obj.current || 0;
+                      totalProgress[type] += obj.current || 0;
                     });
                   });
 
@@ -422,6 +392,115 @@ export default function CovenPage() {
               </p>
             )}
           </div>
+
+          {/* Create Task Modal */}
+          {showCreateTaskModal && (
+            <div 
+              className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" 
+              onClick={() => {
+                setShowCreateTaskModal(false);
+                setTaskName('');
+                setTaskDescription('');
+              }}
+            >
+              <div 
+                className="bg-gradient-to-br from-purple-900 to-indigo-900 rounded-2xl p-6 max-w-md w-full mx-4 border-2 border-purple-500/50" 
+                onClick={(e) => e.stopPropagation()}
+              >
+                <h3 className="text-2xl font-bold text-white mb-4">Create Coven Task</h3>
+                <form 
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    if (!taskName.trim()) {
+                      showError('Task Name Required', 'Please enter a name for the task.');
+                      return;
+                    }
+                    if (!taskDescription.trim()) {
+                      showError('Task Description Required', 'Please enter a description for the task.');
+                      return;
+                    }
+                    if (taskName.length > 100) {
+                      showError('Task Name Too Long', 'Task name must be 100 characters or less.');
+                      return;
+                    }
+                    if (taskDescription.length > 500) {
+                      showError('Task Description Too Long', 'Task description must be 500 characters or less.');
+                      return;
+                    }
+                    setIsSubmitting(true);
+                    try {
+                      const objectives = [
+                        { type: 'produce', target: 100, item: 'bread', description: 'Produce 100 bread' }
+                      ];
+                      const rewards = { shared_crystals: 500 };
+                      await createTask(currentCoven.id, taskName.trim(), taskDescription.trim(), objectives, rewards);
+                      setShowCreateTaskModal(false);
+                      setTaskName('');
+                      setTaskDescription('');
+                    } catch (err) {
+                      // Error already handled in store
+                    } finally {
+                      setIsSubmitting(false);
+                    }
+                  }}
+                  className="space-y-4"
+                >
+                  <div>
+                    <label htmlFor="taskName" className="block text-white mb-2 font-semibold">
+                      Task Name
+                    </label>
+                    <input
+                      id="taskName"
+                      type="text"
+                      value={taskName}
+                      onChange={(e) => setTaskName(e.target.value)}
+                      placeholder="Enter task name..."
+                      className="w-full px-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                      maxLength={100}
+                      required
+                      autoFocus
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="taskDescription" className="block text-white mb-2 font-semibold">
+                      Task Description
+                    </label>
+                    <textarea
+                      id="taskDescription"
+                      value={taskDescription}
+                      onChange={(e) => setTaskDescription(e.target.value)}
+                      placeholder="Enter task description..."
+                      rows={4}
+                      className="w-full px-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none"
+                      maxLength={500}
+                      required
+                    />
+                  </div>
+                  <div className="flex gap-3">
+                    <button
+                      type="submit"
+                      disabled={isSubmitting || !taskName.trim() || !taskDescription.trim()}
+                      className="flex-1 py-3 px-4 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {isSubmitting ? 'Creating...' : 'Create Task'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowCreateTaskModal(false);
+                        setTaskName('');
+                        setTaskDescription('');
+                      }}
+                      disabled={isSubmitting}
+                      className="px-6 py-3 bg-slate-600 hover:bg-slate-700 text-white rounded-lg font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     );

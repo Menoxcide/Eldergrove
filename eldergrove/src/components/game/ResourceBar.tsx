@@ -3,10 +3,15 @@
 import { usePlayerStore } from '@/stores/usePlayerStore'
 import { Skeleton } from '@/components/ui/LoadingSkeleton'
 import Tooltip from '@/components/ui/Tooltip'
+import ProgressBar from '@/components/ui/ProgressBar'
 import { getCrystalsTooltip, getLevelTooltip, getXPTooltip } from '@/lib/tooltipUtils'
 
 const ResourceBar = () => {
   const { crystals, level, xp, loading } = usePlayerStore()
+  
+  // Calculate XP progress: (current_xp % (level * 1000)) / (level * 1000) * 100
+  const xpForNextLevel = level * 1000
+  const xpProgress = xpForNextLevel > 0 ? ((xp % xpForNextLevel) / xpForNextLevel) * 100 : 0
 
   if (loading) {
     return (
@@ -33,8 +38,17 @@ const ResourceBar = () => {
         </div>
       </Tooltip>
       <Tooltip content={getXPTooltip(xp, level)} position="bottom">
-        <div className="flex items-center space-x-2 px-4 py-2 bg-amber-800/30 hover:bg-amber-700/50 rounded-xl transition-all duration-200 flex-1 justify-end">
-          <span className="font-mono">{xp.toLocaleString()} XP</span>
+        <div className="flex flex-col items-end space-y-1 px-4 py-2 bg-amber-800/30 hover:bg-amber-700/50 rounded-xl transition-all duration-200 flex-1 min-w-[120px]">
+          <div className="flex items-center justify-end space-x-2 w-full">
+            <span className="text-lg">⭐</span>
+            <span className="font-mono text-sm">{xp.toLocaleString()} XP</span>
+          </div>
+          <div className="w-full">
+            <ProgressBar 
+              progress={xpProgress} 
+              className="h-1.5"
+            />
+          </div>
         </div>
       </Tooltip>
     </div>

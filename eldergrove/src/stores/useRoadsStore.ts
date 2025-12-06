@@ -21,6 +21,7 @@ export interface RoadsState {
   fetchRoads: () => Promise<void>
   placeRoad: (gridX: number, gridY: number) => Promise<void>
   removeRoad: (gridX: number, gridY: number) => Promise<void>
+  recalculateAllRoadTypes: () => Promise<void>
   subscribeToRoads: () => () => void
 }
 
@@ -48,8 +49,8 @@ export const useRoadsStore = create<RoadsState>((set, get) => ({
         .order('created_at', { ascending: true })
       if (error) throw error
       setRoads(data || [])
-    } catch (err: any) {
-      const errorMessage = err?.message || 'Failed to fetch roads'
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to fetch roads'
       setError(errorMessage)
       handleError(err, errorMessage)
     } finally {
@@ -68,8 +69,8 @@ export const useRoadsStore = create<RoadsState>((set, get) => ({
       const { useGameMessageStore } = await import('@/stores/useGameMessageStore')
       useGameMessageStore.getState().addMessage('success', 'Road placed!')
       await fetchRoads()
-    } catch (err: any) {
-      const errorMessage = err?.message || 'Failed to place road'
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to place road'
       setError(errorMessage)
       handleError(err, errorMessage)
       throw err
@@ -87,8 +88,22 @@ export const useRoadsStore = create<RoadsState>((set, get) => ({
       const { useGameMessageStore } = await import('@/stores/useGameMessageStore')
       useGameMessageStore.getState().addMessage('success', 'Road removed!')
       await fetchRoads()
-    } catch (err: any) {
-      const errorMessage = err?.message || 'Failed to remove road'
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to remove road'
+      setError(errorMessage)
+      handleError(err, errorMessage)
+      throw err
+    }
+  },
+  recalculateAllRoadTypes: async () => {
+    const { fetchRoads, setError } = get()
+    try {
+      const supabase = createClient()
+      const { error } = await supabase.rpc('recalculate_all_road_types')
+      if (error) throw error
+      await fetchRoads()
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to recalculate road types'
       setError(errorMessage)
       handleError(err, errorMessage)
       throw err

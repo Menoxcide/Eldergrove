@@ -11,10 +11,10 @@ if (typeof window !== 'undefined') {
     src: ['/audio/plant.wav', '/audio/plant.mp3'],
     volume: 0.5,
     preload: true,
-    onloaderror: (id: number, error: any) => {
+    onloaderror: (id: number, error: unknown) => {
       console.warn('Failed to load plant sound:', error);
     },
-    onplayerror: (id: number, error: any) => {
+    onplayerror: (id: number, error: unknown) => {
       console.warn('Failed to play plant sound:', error);
     }
   });
@@ -23,10 +23,10 @@ if (typeof window !== 'undefined') {
     src: ['/audio/harvest.wav', '/audio/harvest.mp3'],
     volume: 0.5,
     preload: true,
-    onloaderror: (id: number, error: any) => {
+    onloaderror: (id: number, error: unknown) => {
       console.warn('Failed to load harvest sound:', error);
     },
-    onplayerror: (id: number, error: any) => {
+    onplayerror: (id: number, error: unknown) => {
       console.warn('Failed to play harvest sound:', error);
     }
   });
@@ -35,10 +35,10 @@ if (typeof window !== 'undefined') {
     src: ['/audio/collect.wav', '/audio/collect.mp3'],
     volume: 0.5,
     preload: true,
-    onloaderror: (id: number, error: any) => {
+    onloaderror: (id: number, error: unknown) => {
       console.warn('Failed to load collect sound:', error);
     },
-    onplayerror: (id: number, error: any) => {
+    onplayerror: (id: number, error: unknown) => {
       console.warn('Failed to play collect sound:', error);
     }
   });
@@ -47,31 +47,19 @@ if (typeof window !== 'undefined') {
 // Play sound effects
 export const playPlantSound = () => {
   if (plantSound) {
-    try {
-      plantSound.play();
-    } catch (error) {
-      console.warn('Error playing plant sound:', error);
-    }
+    plantSound.play();
   }
 };
 
 export const playHarvestSound = () => {
   if (harvestSound) {
-    try {
-      harvestSound.play();
-    } catch (error) {
-      console.warn('Error playing harvest sound:', error);
-    }
+    harvestSound.play();
   }
 };
 
 export const playCollectSound = () => {
   if (collectSound) {
-    try {
-      collectSound.play();
-    } catch (error) {
-      console.warn('Error playing collect sound:', error);
-    }
+    collectSound.play();
   }
 };
 

@@ -69,8 +69,8 @@ export const useCityStore = create<CityState>((set, get) => ({
         .order('created_at', { ascending: true })
       if (error) throw error
       setBuildings(data || [])
-    } catch (err: any) {
-      const errorMessage = err?.message || 'Failed to fetch buildings'
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to fetch buildings'
       setError(errorMessage)
       handleError(err, errorMessage)
     } finally {
@@ -97,8 +97,8 @@ export const useCityStore = create<CityState>((set, get) => ({
       } else {
         setBuildingTypes(data || [])
       }
-    } catch (err: any) {
-      const errorMessage = err?.message || 'Failed to fetch building types'
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to fetch building types'
       setError(errorMessage)
       handleError(err, errorMessage)
     } finally {
@@ -118,11 +118,10 @@ export const useCityStore = create<CityState>((set, get) => ({
       const { useGameMessageStore } = await import('@/stores/useGameMessageStore')
       useGameMessageStore.getState().addMessage('success', 'Building placed!')
       await fetchBuildings()
-      // Refresh player profile to update population
       const { usePlayerStore } = await import('./usePlayerStore')
       await usePlayerStore.getState().fetchPlayerProfile()
-    } catch (err: any) {
-      const errorMessage = err?.message || 'Failed to place building'
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to place building'
       setError(errorMessage)
       handleError(err, errorMessage)
       throw err
@@ -141,8 +140,8 @@ export const useCityStore = create<CityState>((set, get) => ({
       await fetchBuildings()
       const { useGameMessageStore } = await import('@/stores/useGameMessageStore')
       useGameMessageStore.getState().addMessage('success', 'Building moved successfully!')
-    } catch (err: any) {
-      const errorMessage = err?.message || 'Failed to move building'
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to move building'
       setError(errorMessage)
       handleError(err, errorMessage)
       throw err
@@ -159,11 +158,10 @@ export const useCityStore = create<CityState>((set, get) => ({
       const { useGameMessageStore } = await import('@/stores/useGameMessageStore')
       useGameMessageStore.getState().addMessage('success', 'Building removed!')
       await fetchBuildings()
-      // Refresh player profile to update population
       const { usePlayerStore } = await import('./usePlayerStore')
       await usePlayerStore.getState().fetchPlayerProfile()
-    } catch (err: any) {
-      const errorMessage = err?.message || 'Failed to remove building'
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to remove building'
       setError(errorMessage)
       handleError(err, errorMessage)
       throw err

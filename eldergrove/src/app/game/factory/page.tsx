@@ -58,7 +58,6 @@ export default function FactoryPage() {
   useEffect(() => {
     if (loading) return;
     
-    // Reset the flag when queue is completely empty to allow retrying when new production completes
     if (queue.length === 0) {
       hasAutoCollected.current = false;
       return;
@@ -80,10 +79,8 @@ export default function FactoryPage() {
         for (const readyItem of readySlots) {
           try {
             await collectFactory(readyItem.slot);
-            // Small delay between collections to avoid overwhelming the UI
             await new Promise(resolve => setTimeout(resolve, 300));
           } catch (error) {
-            // Error already handled in store
             console.error('Auto-collect failed for slot', readyItem.slot, error);
           }
         }
@@ -110,7 +107,6 @@ export default function FactoryPage() {
   const handleStartProduction = async (recipeName: string) => {
     if (!selectedFactory) return;
     
-    // Pre-validation: Check if global slots are available
     if (currentQueueSlots >= maxSlots) {
       showError(
         'Factory Queue Full',
@@ -121,7 +117,6 @@ export default function FactoryPage() {
       return;
     }
     
-    // Pre-validation: Check if recipe can be crafted
     const recipe = recipes.find(r => r.name === recipeName);
     if (recipe && !canCraftRecipe(recipe)) {
       // Find which resource is missing
@@ -151,12 +146,8 @@ export default function FactoryPage() {
       }
     }
     
-    try {
-      await startProduction(selectedFactory, recipeName);
-      await fetchInventory(); // Refresh inventory after starting
-    } catch (error) {
-      // Error already handled in store
-    }
+    await startProduction(selectedFactory, recipeName);
+    await fetchInventory();
   };
   
   // Get selected factory info for upgrade button
@@ -217,7 +208,6 @@ export default function FactoryPage() {
     }
   };
 
-  // Handle upgrade button click
   const handleUpgradeClick = async () => {
     if (!selectedFactory || isMaxLevel) return;
     
@@ -228,34 +218,23 @@ export default function FactoryPage() {
     }
   };
 
-  // Handle upgrade confirmation
   const handleUpgradeConfirm = async () => {
     if (!selectedFactory) return;
-    try {
-      await upgradeFactory(selectedFactory);
-      await fetchFactories();
-      await fetchInventory();
-      setShowUpgradeModal(false);
-      setUpgradeCost(null);
-    } catch (error) {
-      // Error handled in store
-    }
+    await upgradeFactory(selectedFactory);
+    await fetchFactories();
+    await fetchInventory();
+    setShowUpgradeModal(false);
+    setUpgradeCost(null);
   };
 
-  // Handle purchase slot click
   const handlePurchaseSlotClick = () => {
     setShowPurchaseSlotModal(true);
   };
 
-  // Handle purchase slot confirmation
   const handlePurchaseSlotConfirm = async () => {
-    try {
-      await purchaseFactorySlot();
-      await getSlotInfo();
-      setShowPurchaseSlotModal(false);
-    } catch (error) {
-      // Error handled in store
-    }
+    await purchaseFactorySlot();
+    await getSlotInfo();
+    setShowPurchaseSlotModal(false);
   };
 
   if (loading) {

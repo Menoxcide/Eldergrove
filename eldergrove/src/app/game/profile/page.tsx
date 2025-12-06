@@ -10,14 +10,71 @@ import { useErrorHandler } from '@/hooks/useErrorHandler';
 
 export default function ProfilePage() {
   const router = useRouter();
-  const { id, username, crystals, level, xp, aether, loading: playerLoading } = usePlayerStore();
+  const { id, username, crystals, level, xp, aether, loading: playerLoading, fetchPlayerProfile } = usePlayerStore();
   const { currentCoven, fetchCoven, loading: covenLoading } = useCovenStore();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
-  const { handleError } = useErrorHandler();
+  const [isEditingUsername, setIsEditingUsername] = useState(false);
+  const [newUsername, setNewUsername] = useState('');
+  const [isSavingUsername, setIsSavingUsername] = useState(false);
+  const { handleError, showError } = useErrorHandler();
 
   useEffect(() => {
     fetchCoven();
   }, [fetchCoven]);
+
+  useEffect(() => {
+    setNewUsername(username || '');
+  }, [username]);
+
+  const handleSaveUsername = async () => {
+    if (!newUsername.trim()) {
+      showError('Username Required', 'Please enter a username.');
+      return;
+    }
+    if (newUsername.trim().length < 3) {
+      showError('Username Too Short', 'Username must be at least 3 characters long.');
+      return;
+    }
+    if (newUsername.trim().length > 20) {
+      showError('Username Too Long', 'Username must be 20 characters or less.');
+      return;
+    }
+    if (!/^[a-zA-Z0-9_-]+$/.test(newUsername.trim())) {
+      showError('Invalid Username', 'Username can only contain letters, numbers, underscores, and hyphens.');
+      return;
+    }
+    if (newUsername.trim() === username) {
+      setIsEditingUsername(false);
+      return;
+    }
+
+    setIsSavingUsername(true);
+    try {
+      const supabase = createClient();
+      const { error } = await supabase
+        .from('profiles')
+        .update({ username: newUsername.trim() })
+        .eq('id', id);
+
+      if (error) {
+        if (error.code === '23505') {
+          showError('Username Taken', 'This username is already taken. Please choose another.');
+        } else {
+          throw error;
+        }
+        return;
+      }
+
+      await fetchPlayerProfile();
+      setIsEditingUsername(false);
+      const { useGameMessageStore } = await import('@/stores/useGameMessageStore');
+      useGameMessageStore.getState().addMessage('success', 'Username updated successfully!');
+    } catch (err: unknown) {
+      handleError(err, 'Failed to update username');
+    } finally {
+      setIsSavingUsername(false);
+    }
+  };
 
   const handleLogout = async () => {
     setIsLoggingOut(true);
@@ -31,8 +88,9 @@ export default function ProfilePage() {
         useGameMessageStore.getState().addMessage('success', 'Logged out successfully');
         router.push('/login');
       }
-    } catch (err: any) {
-      handleError(err, err.message);
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to logout'
+      handleError(err, errorMessage);
     } finally {
       setIsLoggingOut(false);
     }
@@ -114,6 +172,66 @@ export default function ProfilePage() {
                 style={{ width: `${Math.min(xpProgress, 100)}%` }}
               />
             </div>
+          </div>
+
+          {/* Username Editor */}
+          <div className="border-t border-white/20 pt-4">
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-sm font-semibold text-white">Username</label>
+              {!isEditingUsername && (
+                <button
+                  onClick={() => setIsEditingUsername(true)}
+                  className="text-sm text-purple-400 hover:text-purple-300 transition-colors"
+                >
+                  {username ? 'Edit' : 'Set Username'}
+                </button>
+              )}
+            </div>
+            {isEditingUsername ? (
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={newUsername}
+                  onChange={(e) => setNewUsername(e.target.value)}
+                  placeholder="Enter username..."
+                  maxLength={20}
+                  className="flex-1 px-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      handleSaveUsername();
+                    } else if (e.key === 'Escape') {
+                      setIsEditingUsername(false);
+                      setNewUsername(username || '');
+                    }
+                  }}
+                  autoFocus
+                />
+                <button
+                  onClick={handleSaveUsername}
+                  disabled={isSavingUsername}
+                  className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isSavingUsername ? 'Saving...' : 'Save'}
+                </button>
+                <button
+                  onClick={() => {
+                    setIsEditingUsername(false);
+                    setNewUsername(username || '');
+                  }}
+                  disabled={isSavingUsername}
+                  className="px-4 py-2 bg-slate-600 hover:bg-slate-700 text-white rounded-lg font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <p className="text-slate-300">{username || 'Not set'}</p>
+            )}
+            {isEditingUsername && (
+              <p className="text-xs text-slate-400 mt-2">
+                3-20 characters, letters, numbers, underscores, and hyphens only
+              </p>
+            )}
           </div>
         </div>
 

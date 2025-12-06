@@ -24,29 +24,32 @@ function extractSupabaseErrorDetails(error: unknown): Record<string, unknown> {
 }
 
 /**
- * Log error with proper formatting
+ * Log error with proper formatting (only in development)
  */
 function logError(parsedError: ParsedError, originalError: unknown): void {
-  console.error('=== Error Handled ===');
-  console.error('Parsed Error:', JSON.stringify(parsedError, null, 2));
-  
-  // Extract Supabase-specific error details
-  const supabaseDetails = extractSupabaseErrorDetails(originalError);
-  if (supabaseDetails.details || supabaseDetails.hint || supabaseDetails.code) {
-    console.error('Supabase Error Details:', JSON.stringify(supabaseDetails, null, 2));
+  // Only log errors in development environment
+  if (process.env.NODE_ENV === 'development') {
+    console.error('=== Error Handled ===');
+    console.error('Parsed Error:', JSON.stringify(parsedError, null, 2));
+
+    // Extract Supabase-specific error details
+    const supabaseDetails = extractSupabaseErrorDetails(originalError);
+    if (supabaseDetails.details || supabaseDetails.hint || supabaseDetails.code) {
+      console.error('Supabase Error Details:', JSON.stringify(supabaseDetails, null, 2));
+    }
+
+    // Log original error with full details
+    if (originalError instanceof Error) {
+      console.error('Original Error:', {
+        name: originalError.name,
+        message: originalError.message,
+        stack: originalError.stack,
+      });
+    } else {
+      console.error('Original Error:', JSON.stringify(originalError, null, 2));
+    }
+    console.error('===================');
   }
-  
-  // Log original error with full details
-  if (originalError instanceof Error) {
-    console.error('Original Error:', {
-      name: originalError.name,
-      message: originalError.message,
-      stack: originalError.stack,
-    });
-  } else {
-    console.error('Original Error:', JSON.stringify(originalError, null, 2));
-  }
-  console.error('===================');
 }
 
 /**

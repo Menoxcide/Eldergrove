@@ -87,8 +87,9 @@ export const useQuestStore = create<QuestState>((set, get) => ({
       }))
       
       setQuests(quests)
-    } catch (err: any) {
-      setError(err.message)
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to fetch quests'
+      setError(errorMessage)
       console.error('Error fetching quests:', err)
     } finally {
       setLoading(false)
@@ -123,8 +124,9 @@ export const useQuestStore = create<QuestState>((set, get) => ({
       }))
 
       setPlayerQuests(playerQuestsWithDetails)
-    } catch (err: any) {
-      setError(err.message)
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to fetch player quests'
+      setError(errorMessage)
       console.error('Error fetching player quests:', err)
     } finally {
       setLoading(false)
@@ -141,9 +143,10 @@ export const useQuestStore = create<QuestState>((set, get) => ({
       await fetchPlayerQuests()
       const { useGameMessageStore } = await import('@/stores/useGameMessageStore')
       useGameMessageStore.getState().addMessage('success', 'Quest started!')
-    } catch (err: any) {
-      setError(err.message)
-      handleError(err, err.message)
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to start quest'
+      setError(errorMessage)
+      handleError(err, errorMessage)
       throw err
     }
   },
@@ -159,15 +162,13 @@ export const useQuestStore = create<QuestState>((set, get) => ({
       const result = data as { success: boolean; crystals_awarded: number; xp_awarded: number; new_crystal_balance: number }
       
       if (result.success) {
-        // Use the returned crystal balance directly to avoid race conditions
         if (result.new_crystal_balance !== null && result.new_crystal_balance !== undefined) {
           const playerStore = usePlayerStore.getState()
           playerStore.setCrystals(result.new_crystal_balance)
         }
-        
-        // Refresh player profile to update XP and level (XP is granted by claim_quest_reward)
+
         await usePlayerStore.getState().fetchPlayerProfile()
-        
+
         const { useGameMessageStore } = await import('@/stores/useGameMessageStore')
         useGameMessageStore.getState().addMessage(
           'success',
@@ -175,9 +176,10 @@ export const useQuestStore = create<QuestState>((set, get) => ({
         )
         await fetchPlayerQuests()
       }
-    } catch (err: any) {
-      setError(err.message)
-      handleError(err, err.message)
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to claim quest reward'
+      setError(errorMessage)
+      handleError(err, errorMessage)
       throw err
     }
   },
@@ -196,9 +198,10 @@ export const useQuestStore = create<QuestState>((set, get) => ({
       await fetchPlayerQuests()
       const { useGameMessageStore } = await import('@/stores/useGameMessageStore')
       useGameMessageStore.getState().addMessage('success', 'Daily quests generated!')
-    } catch (err: any) {
-      setError(err.message)
-      handleError(err, err.message)
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to generate daily quests'
+      setError(errorMessage)
+      handleError(err, errorMessage)
     }
   },
   subscribeToQuests: () => {

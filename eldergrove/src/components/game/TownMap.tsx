@@ -9,8 +9,12 @@ import { useDecorationsStore, type Decoration, type DecorationType } from '@/sto
 import { useRoadsStore, type Road } from '@/stores/useRoadsStore';
 import BuildingVisual from '@/components/game/BuildingVisual';
 import RoadTile from '@/components/game/RoadTile';
+import IsometricBuilding from '@/components/game/IsometricBuilding';
+import IsometricTerrain from '@/components/game/IsometricTerrain';
 import Tooltip from '@/components/ui/Tooltip';
 import { getBuildingTooltip, getActionTooltip } from '@/lib/tooltipUtils';
+import { gridToIsometric, isometricToGrid, getZIndex, TILE_WIDTH, TILE_HEIGHT } from '@/lib/isometricUtils';
+import { useAssetStore } from '@/stores/useAssetStore';
 
 interface TownMapProps {
   loading?: boolean;
@@ -34,6 +38,7 @@ const TownMap: React.FC<TownMapProps> = ({ loading = false }) => {
     fetchRoads,
     placeRoad,
     removeRoad,
+    recalculateAllRoadTypes,
     subscribeToRoads
   } = useRoadsStore();
   const [isClaiming, setIsClaiming] = useState(false);
@@ -66,6 +71,7 @@ const TownMap: React.FC<TownMapProps> = ({ loading = false }) => {
   } = useDecorationsStore();
   
   const GRID_SIZE = townSize || 10;
+  const preloadAllAssets = useAssetStore((state) => state.preloadAllAssets);
 
   useEffect(() => {
     fetchPlayerProfile();
@@ -74,6 +80,12 @@ const TownMap: React.FC<TownMapProps> = ({ loading = false }) => {
     fetchDecorations();
     fetchDecorationTypes();
     fetchRoads();
+    
+    // Preload all isometric assets in the background
+    preloadAllAssets().catch((error) => {
+      console.warn('Failed to preload some assets:', error);
+    });
+    
     const unsubscribeBuildings = subscribeToBuildings();
     const unsubscribeDecorations = subscribeToDecorations();
     const unsubscribeRoads = subscribeToRoads();
@@ -82,7 +94,7 @@ const TownMap: React.FC<TownMapProps> = ({ loading = false }) => {
       unsubscribeDecorations();
       unsubscribeRoads();
     };
-  }, [fetchPlayerProfile, fetchBuildings, fetchBuildingTypes, fetchDecorations, fetchDecorationTypes, fetchRoads, subscribeToBuildings, subscribeToDecorations, subscribeToRoads]);
+  }, [fetchPlayerProfile, fetchBuildings, fetchBuildingTypes, fetchDecorations, fetchDecorationTypes, fetchRoads, subscribeToBuildings, subscribeToDecorations, subscribeToRoads, preloadAllAssets]);
 
   useEffect(() => {
     if (showExpansionModal) {
@@ -199,41 +211,25 @@ const TownMap: React.FC<TownMapProps> = ({ loading = false }) => {
 
   const handleCellClick = async (row: number, col: number) => {
     if (placementMode === 'place' && selectedBuildingType) {
-      try {
-        await placeBuilding(selectedBuildingType, col, row);
-        setPlacementMode('view');
-        setSelectedBuildingType(null);
-      } catch (error) {
-        // Error handled in store
-      }
+      await placeBuilding(selectedBuildingType, col, row);
+      setPlacementMode('view');
+      setSelectedBuildingType(null);
       return;
     }
 
     if (placementMode === 'decorate' && selectedDecorationType) {
-      try {
-        await placeDecoration(selectedDecorationType, col, row);
-        setPlacementMode('view');
-        setSelectedDecorationType(null);
-      } catch (error) {
-        // Error handled in store
-      }
+      await placeDecoration(selectedDecorationType, col, row);
+      setPlacementMode('view');
+      setSelectedDecorationType(null);
       return;
     }
 
     if (placementMode === 'roads') {
       const road = getRoadAtCell(col, row);
       if (road) {
-        try {
-          await removeRoad(col, row);
-        } catch (error) {
-          // Error handled in store
-        }
+        await removeRoad(col, row);
       } else {
-        try {
-          await placeRoad(col, row);
-        } catch (error) {
-          // Error handled in store
-        }
+        await placeRoad(col, row);
       }
       return;
     }
@@ -290,24 +286,21 @@ const TownMap: React.FC<TownMapProps> = ({ loading = false }) => {
 
   const canPlaceBuilding = (buildingType: BuildingType | null, x: number, y: number): boolean => {
     if (!buildingType) return false;
-    
-    // Check building limit
+
     if (buildingType.max_count !== null) {
       const currentCount = buildings.filter(b => b.building_type === buildingType.building_type).length;
       if (currentCount >= buildingType.max_count) {
         return false;
       }
     }
-    
-    // Check grid bounds and occupancy
+
     for (let dx = 0; dx < buildingType.size_x; dx++) {
       for (let dy = 0; dy < buildingType.size_y; dy++) {
         if (isCellOccupied(x + dx, y + dy)) return false;
         if (x + dx >= GRID_SIZE || y + dy >= GRID_SIZE) return false;
       }
     }
-    
-    // Check resources
+
     const hasCrystals = crystals >= buildingType.base_cost_crystals;
     const hasPopulation = (buildingType.population_required || 0) <= (population ?? 0);
     const hasLevel = (buildingType.level_required || 1) <= (playerLevel || 1);
@@ -327,11 +320,7 @@ const TownMap: React.FC<TownMapProps> = ({ loading = false }) => {
   };
 
   const canPlaceRoad = (x: number, y: number): boolean => {
-    // Roads can't be placed on buildings or decorations
-    // Roads can be placed on existing roads (to update their type)
-    // Check bounds
     if (x < 0 || x >= GRID_SIZE || y < 0 || y >= GRID_SIZE) return false;
-    // Check if cell is occupied by building or decoration
     return !isCellOccupied(x, y);
   };
 
@@ -410,6 +399,23 @@ const TownMap: React.FC<TownMapProps> = ({ loading = false }) => {
           >
             {placementMode === 'roads' ? '✓ Roads' : 'Roads'}
           </button>
+          {placementMode === 'roads' && (
+            <button
+              onClick={async () => {
+                try {
+                  await recalculateAllRoadTypes();
+                  const { useGameMessageStore } = await import('@/stores/useGameMessageStore');
+                  useGameMessageStore.getState().addMessage('success', 'Road types recalculated!');
+                } catch (error) {
+                  // Error handled in store
+                }
+              }}
+              className="px-3 py-1.5 md:px-4 md:py-2 rounded-lg font-semibold transition-all text-sm bg-blue-600 text-white hover:bg-blue-500"
+              title="Fix road connections"
+            >
+              🔧 Fix Roads
+            </button>
+          )}
           <button
             onClick={() => {
               setPlacementMode(placementMode === 'remove' ? 'view' : 'remove');
@@ -577,7 +583,7 @@ const TownMap: React.FC<TownMapProps> = ({ loading = false }) => {
             </button>
           </div>
 
-          {/* Town Grid */}
+          {/* Town Grid - Isometric View */}
           <div 
             className="relative w-full aspect-square bg-gradient-to-br from-green-100 via-green-200 to-emerald-300 p-2 rounded-xl shadow-inner border-4 border-green-600/50 overflow-hidden"
             onWheel={handleWheel}
@@ -587,253 +593,248 @@ const TownMap: React.FC<TownMapProps> = ({ loading = false }) => {
             onMouseLeave={handleMouseUp}
             ref={gridRef}
           >
+            {/* Isometric rendering container */}
             <div 
-              className="w-full h-full grid gap-[1px] bg-black/10 rounded-lg"
+              className="relative w-full h-full"
               style={{
-                gridTemplateColumns: `repeat(${GRID_SIZE}, 1fr)`,
-                gridTemplateRows: `repeat(${GRID_SIZE}, 1fr)`,
                 transform: `scale(${zoom}) translate(${pan.x / zoom}px, ${pan.y / zoom}px)`,
                 transformOrigin: 'center center',
                 transition: isDragging ? 'none' : 'transform 0.1s ease-out'
               }}
             >
-              {Array.from({ length: GRID_SIZE }, (_, rowIndex) =>
-                Array.from({ length: GRID_SIZE }, (_, colIndex) => {
-                  const building = getBuildingAtCell(colIndex, rowIndex);
-                  const isTopLeft = building && building.grid_x === colIndex && building.grid_y === rowIndex;
-                  const decoration = getDecorationAtCell(colIndex, rowIndex);
-                  const isDecorationTopLeft = decoration && decoration.grid_x === colIndex && decoration.grid_y === rowIndex;
-                  const road = getRoadAtCell(colIndex, rowIndex);
-                  const area = getCellArea(rowIndex, colIndex);
-                  const isInteractive = area !== null && placementMode === 'view';
-                  const isHovered = hoveredCell?.x === colIndex && hoveredCell?.y === rowIndex;
-                  const canPlace = selectedBuildingTypeData && canPlaceBuilding(selectedBuildingTypeData, colIndex, rowIndex);
-                  const canPlaceDeco = selectedDecorationTypeData && canPlaceDecoration(selectedDecorationTypeData, colIndex, rowIndex);
-                  const canPlaceRoadHere = canPlaceRoad(colIndex, rowIndex);
-
-                  // Show building preview
-                  const showPreview = placementMode === 'place' && selectedBuildingTypeData && isHovered && canPlace;
-                  const previewBuildingType = showPreview ? selectedBuildingTypeData : null;
-
-                  let cellClass = 'aspect-square relative flex items-center justify-center transition-all duration-150 border ';
-                  
-                  // Terrain base styling - Township-inspired grass
-                  if (road) {
-                    cellClass += 'bg-gray-500/20 border-gray-600/30';
-                  } else if (placementMode === 'place' && selectedBuildingTypeData) {
-                    if (canPlace && isHovered) {
-                      cellClass += 'bg-green-400/40 border-green-500 cursor-pointer';
-                    } else if (!canPlace && isHovered) {
-                      cellClass += 'bg-red-400/40 border-red-500 cursor-not-allowed';
-                    } else {
-                      cellClass += 'bg-green-200/30 border-green-300/30';
-                    }
-                  } else if (placementMode === 'decorate' && selectedDecorationTypeData) {
-                    if (canPlaceDeco && isHovered) {
-                      cellClass += 'bg-pink-400/40 border-pink-500 cursor-pointer';
-                    } else if (!canPlaceDeco && isHovered) {
-                      cellClass += 'bg-red-400/40 border-red-500 cursor-not-allowed';
-                    } else {
-                      cellClass += 'bg-green-200/30 border-green-300/30';
-                    }
-                  } else if (placementMode === 'roads') {
-                    if (road) {
-                      cellClass += isHovered ? 'bg-gray-500/70 border-gray-400 cursor-pointer ring-2 ring-gray-300' : 'bg-gray-500/30 border-gray-600/50';
-                    } else if (canPlaceRoadHere) {
-                      if (isHovered) {
-                        cellClass += 'bg-gray-400/60 border-gray-500 cursor-pointer ring-2 ring-gray-300';
-                      } else {
-                        cellClass += 'bg-gray-300/30 border-gray-400/40';
-                      }
-                    } else {
-                      // Can't place road here (occupied by building/decoration)
-                      cellClass += isHovered ? 'bg-red-400/40 border-red-500 cursor-not-allowed' : 'bg-green-200/30 border-green-300/30';
-                    }
-                  } else if (placementMode === 'remove' && (building && isTopLeft || decoration && isDecorationTopLeft || road)) {
-                    cellClass += isHovered ? 'bg-red-500/50 border-red-400 cursor-pointer' : 'bg-red-500/30 border-red-400/50 cursor-pointer';
-                  } else if (isInteractive) {
-                    cellClass += 'bg-green-300/50 hover:bg-green-400/60 hover:shadow-md border-green-400/40 cursor-pointer';
-                  } else {
-                    // Default grass terrain
-                    cellClass += 'bg-gradient-to-br from-green-200 via-green-300 to-emerald-400 border-green-400/20';
-                  }
-
-                  const getCellTooltipContent = () => {
-                    if (placementMode === 'place' && selectedBuildingTypeData) {
-                      if (canPlace) {
-                        return getBuildingTooltip(selectedBuildingTypeData);
-                      } else {
-                        return [
-                          {
-                            title: 'Cannot Place Here',
-                            icon: '⚠️',
-                            color: 'red' as const,
-                            content: (
-                              <div className="space-y-1 text-xs">
-                                <p>• Cell is occupied or out of bounds</p>
-                                <p>• Need {selectedBuildingTypeData.base_cost_crystals} crystals</p>
-                                {selectedBuildingTypeData.population_required > 0 && (
-                                  <p>• Need {selectedBuildingTypeData.population_required} population</p>
-                                )}
-                              </div>
-                            ),
-                          },
-                        ];
-                      }
-                    } else if (placementMode === 'decorate' && selectedDecorationTypeData) {
-                      if (canPlaceDeco) {
-                        return [
-                          {
-                            title: selectedDecorationTypeData.name,
-                            icon: selectedDecorationTypeData.icon || '🎨',
-                            color: 'purple' as const,
-                            content: (
-                              <div className="space-y-2">
-                                <div className="flex items-center justify-between">
-                                  <span>Cost:</span>
-                                  <span className="font-bold text-yellow-300">💎 {selectedDecorationTypeData.cost_crystals.toLocaleString()}</span>
-                                </div>
-                                <div className="flex items-center justify-between text-xs">
-                                  <span>Size:</span>
-                                  <span className="text-slate-300">{selectedDecorationTypeData.size_x}x{selectedDecorationTypeData.size_y}</span>
-                                </div>
-                              </div>
-                            ),
-                          },
-                        ];
-                      }
-                    } else if (placementMode === 'roads') {
-                      if (road) {
-                        return [
-                          {
-                            title: 'Road',
-                            icon: '🛣️',
-                            color: 'gray' as const,
-                            content: (
-                              <div className="space-y-1 text-xs">
-                                <p>Click to remove road</p>
-                                <p>Type: {road.road_type}</p>
-                              </div>
-                            ),
-                          },
-                        ];
-                      } else if (canPlaceRoadHere) {
-                        return [
-                          {
-                            title: 'Place Road',
-                            icon: '🛣️',
-                            color: 'gray' as const,
-                            content: (
-                              <div className="space-y-1 text-xs">
-                                <p>Click to place road</p>
-                                <p>• Roads connect buildings</p>
-                                <p>• Road type auto-updates based on connections</p>
-                              </div>
-                            ),
-                          },
-                        ];
-                      } else {
-                        return [
-                          {
-                            title: 'Cannot Place Road',
-                            icon: '⚠️',
-                            color: 'red' as const,
-                            content: (
-                              <div className="space-y-1 text-xs">
-                                <p>Cell is occupied by a building or decoration</p>
-                                <p>Remove the building/decoration first</p>
-                              </div>
-                            ),
-                          },
-                        ];
-                      }
-                    } else if (placementMode === 'remove' && building && isTopLeft) {
-                      const buildingType = buildingTypes.find(bt => bt.building_type === building.building_type);
-                      if (buildingType) {
-                        return getBuildingTooltip(buildingType, building.level);
-                      }
-                    } else if (isInteractive && area) {
-                      return [
-                        {
-                          title: area.name,
-                          icon: area.icon,
-                          color: 'green' as const,
-                          content: (
-                            <div className="space-y-1 text-xs">
-                              <p>Click to visit this area</p>
-                            </div>
-                          ),
-                        },
-                      ];
-                    } else if (building && isTopLeft) {
-                      const buildingType = buildingTypes.find(bt => bt.building_type === building.building_type);
-                      if (buildingType) {
-                        return getBuildingTooltip(buildingType, building.level);
-                      }
-                    }
-                    return [];
-                  };
-
-                  return (
-                    <Tooltip key={`cell-${rowIndex}-${colIndex}`} content={getCellTooltipContent()} position="top">
-                      <div
-                        className={cellClass}
-                        onClick={() => handleCellClick(rowIndex, colIndex)}
-                        onMouseEnter={() => setHoveredCell({ x: colIndex, y: rowIndex })}
-                        onMouseLeave={() => setHoveredCell(null)}
-                        role="button"
-                        tabIndex={0}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' || e.key === ' ') {
-                            handleCellClick(rowIndex, colIndex);
-                          }
+              {/* Calculate isometric bounds for centering */}
+              {(() => {
+                // Calculate the bounding box of the isometric grid
+                const topLeft = gridToIsometric(0, 0);
+                const bottomRight = gridToIsometric(GRID_SIZE - 1, GRID_SIZE - 1);
+                const isoWidth = Math.abs(bottomRight.x - topLeft.x) + TILE_WIDTH;
+                const isoHeight = Math.abs(bottomRight.y - topLeft.y) + TILE_HEIGHT;
+                const centerX = (topLeft.x + bottomRight.x) / 2;
+                const centerY = (topLeft.y + bottomRight.y) / 2;
+                
+                return (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      left: '50%',
+                      top: '50%',
+                      width: `${isoWidth}px`,
+                      height: `${isoHeight}px`,
+                      transform: `translate(calc(-50% + ${-centerX}px), calc(-50% + ${-centerY}px))`,
+                    }}
+                  >
+                    {/* Render terrain tiles */}
+                    {Array.from({ length: GRID_SIZE }, (_, rowIndex) =>
+                      Array.from({ length: GRID_SIZE }, (_, colIndex) => {
+                        const road = getRoadAtCell(colIndex, rowIndex);
+                        // Only render terrain if there's no road (roads will render on top)
+                        if (!road) {
+                          return (
+                            <IsometricTerrain
+                              key={`terrain-${colIndex}-${rowIndex}`}
+                              gridX={colIndex}
+                              gridY={rowIndex}
+                              terrainType="grass"
+                            />
+                          );
+                        }
+                        return null;
+                      })
+                    )}
+                    
+                    {/* Render roads */}
+                    {roads.map((road) => (
+                      <RoadTile
+                        key={`road-${road.grid_x}-${road.grid_y}`}
+                        road={road}
+                        gridX={road.grid_x}
+                        gridY={road.grid_y}
+                        useIsometric={true}
+                      />
+                    ))}
+                    
+                    {/* Render decorations */}
+                    {decorations.map((decoration) => {
+                      const decorationType = decorationTypes.find(dt => dt.decoration_type === decoration.decoration_type);
+                      if (!decorationType) return null;
+                      
+                      return (
+                        <IsometricBuilding
+                          key={`decoration-${decoration.id}`}
+                          buildingType={{
+                            building_type: decoration.decoration_type,
+                            name: decorationType.name,
+                            category: 'decoration' as const,
+                            base_cost_crystals: decorationType.cost_crystals,
+                            size_x: decorationType.size_x,
+                            size_y: decorationType.size_y,
+                            provides_population: 0,
+                            population_required: 0,
+                            max_level: 1,
+                            max_count: null,
+                          }}
+                          gridX={decoration.grid_x}
+                          gridY={decoration.grid_y}
+                          onClick={() => {
+                            if (placementMode === 'remove') {
+                              if (confirm('Remove this decoration?')) {
+                                removeDecoration(decoration.id);
+                              }
+                            }
+                          }}
+                        />
+                      );
+                    })}
+                    
+                    {/* Render buildings with proper depth sorting */}
+                    {buildings
+                      .map(building => {
+                        const buildingType = buildingTypes.find(bt => bt.building_type === building.building_type);
+                        return buildingType ? { building, buildingType } : null;
+                      })
+                      .filter((item): item is { building: typeof buildings[0], buildingType: typeof buildingTypes[0] } => item !== null)
+                      .sort((a, b) => {
+                        // Sort by Y first (south = higher z-index), then by X
+                        if (a.building.grid_y !== b.building.grid_y) {
+                          return a.building.grid_y - b.building.grid_y;
+                        }
+                        return a.building.grid_x - b.building.grid_x;
+                      })
+                      .map(({ building, buildingType }) => (
+                        <IsometricBuilding
+                          key={`building-${building.id}`}
+                          buildingType={buildingType}
+                          gridX={building.grid_x}
+                          gridY={building.grid_y}
+                          level={building.level}
+                          onClick={() => {
+                            if (placementMode === 'view') {
+                              if (buildingType.category === 'factory') {
+                                router.push(`/game/factory?building=${building.building_type}`);
+                              } else {
+                                setSelectedBuilding(building);
+                                setShowBuildingModal(true);
+                              }
+                            } else if (placementMode === 'remove') {
+                              if (confirm('Remove this building?')) {
+                                removeBuilding(building.id);
+                              }
+                            }
+                          }}
+                          onMouseEnter={() => {
+                            if (placementMode === 'view') {
+                              setHoveredCell({ x: building.grid_x, y: building.grid_y });
+                            }
+                          }}
+                          onMouseLeave={() => {
+                            if (placementMode === 'view') {
+                              setHoveredCell(null);
+                            }
+                          }}
+                        />
+                      ))}
+                    
+                    {/* Render building preview */}
+                    {placementMode === 'place' && selectedBuildingTypeData && hoveredCell && canPlaceBuilding(selectedBuildingTypeData, hoveredCell.x, hoveredCell.y) && (
+                      <IsometricBuilding
+                        buildingType={selectedBuildingTypeData}
+                        gridX={hoveredCell.x}
+                        gridY={hoveredCell.y}
+                        isPreview={true}
+                      />
+                    )}
+                    
+                    {/* Render decoration preview */}
+                    {placementMode === 'decorate' && selectedDecorationTypeData && hoveredCell && canPlaceDecoration(selectedDecorationTypeData, hoveredCell.x, hoveredCell.y) && (
+                      <IsometricBuilding
+                        buildingType={{
+                          building_type: selectedDecorationTypeData.decoration_type,
+                          name: selectedDecorationTypeData.name,
+                          category: 'decoration' as const,
+                          base_cost_crystals: selectedDecorationTypeData.cost_crystals,
+                          size_x: selectedDecorationTypeData.size_x,
+                          size_y: selectedDecorationTypeData.size_y,
+                          provides_population: 0,
+                          population_required: 0,
+                          max_level: 1,
+                          max_count: null,
                         }}
-                      >
-                        {/* Road layer (bottom) */}
-                        {road && (
-                          <RoadTile road={road} className="absolute inset-0 z-0" />
-                        )}
+                        gridX={hoveredCell.x}
+                        gridY={hoveredCell.y}
+                        isPreview={true}
+                      />
+                    )}
+                    
+                    {/* Invisible clickable cells for interaction */}
+                    {Array.from({ length: GRID_SIZE }, (_, rowIndex) =>
+                      Array.from({ length: GRID_SIZE }, (_, colIndex) => {
+                        const isoPos = gridToIsometric(colIndex, rowIndex);
+                        const isHovered = hoveredCell?.x === colIndex && hoveredCell?.y === rowIndex;
+                        const canPlace = selectedBuildingTypeData && canPlaceBuilding(selectedBuildingTypeData, colIndex, rowIndex);
+                        const canPlaceDeco = selectedDecorationTypeData && canPlaceDecoration(selectedDecorationTypeData, colIndex, rowIndex);
+                        const canPlaceRoadHere = canPlaceRoad(colIndex, rowIndex);
+                        const road = getRoadAtCell(colIndex, rowIndex);
                         
-                        {/* Building preview (semi-transparent) */}
-                        {previewBuildingType && (
-                          <div className="absolute inset-0 z-10">
-                            <BuildingVisual 
-                              buildingType={previewBuildingType} 
-                              isPreview={true}
-                              className="w-full h-full"
-                            />
-                          </div>
-                        )}
+                        // Determine if this cell should be highlighted
+                        let highlightClass = '';
+                        if (placementMode === 'place' && selectedBuildingTypeData) {
+                          if (canPlace && isHovered) {
+                            highlightClass = 'bg-green-400/40 border-green-500';
+                          } else if (!canPlace && isHovered) {
+                            highlightClass = 'bg-red-400/40 border-red-500';
+                          }
+                        } else if (placementMode === 'decorate' && selectedDecorationTypeData) {
+                          if (canPlaceDeco && isHovered) {
+                            highlightClass = 'bg-pink-400/40 border-pink-500';
+                          } else if (!canPlaceDeco && isHovered) {
+                            highlightClass = 'bg-red-400/40 border-red-500';
+                          }
+                        } else if (placementMode === 'roads') {
+                          if (road && isHovered) {
+                            highlightClass = 'bg-gray-500/70 border-gray-400 ring-2 ring-gray-300';
+                          } else if (canPlaceRoadHere && isHovered) {
+                            highlightClass = 'bg-gray-400/60 border-gray-500 ring-2 ring-gray-300';
+                          } else if (!canPlaceRoadHere && isHovered) {
+                            highlightClass = 'bg-red-400/40 border-red-500';
+                          }
+                        }
                         
-                        {/* Building (top layer) */}
-                        {building && isTopLeft && (
-                          <div className="absolute inset-0 z-20">
-                            <BuildingVisual 
-                              buildingType={buildingTypes.find(bt => bt.building_type === building.building_type)!}
-                              level={building.level}
-                              className="w-full h-full"
-                            />
-                          </div>
-                        )}
-                        
-                        {/* Decoration */}
-                        {decoration && isDecorationTopLeft && (
-                          <span className="text-2xl select-none z-20 relative" role="img">
-                            {decorationTypes.find(dt => dt.decoration_type === decoration.decoration_type)?.icon || '🎨'}
-                          </span>
-                        )}
-                        
-                        {/* Legacy area icons */}
-                        {!building && !decoration && !road && area && (
-                          <span className="text-lg select-none z-10 relative" role="img" aria-label={area.name}>
-                            {area.icon}
-                          </span>
-                        )}
-                      </div>
-                    </Tooltip>
-                  );
-                })
-              )}
+                        return (
+                          <div
+                            key={`cell-${colIndex}-${rowIndex}`}
+                            style={{
+                              position: 'absolute',
+                              left: `${isoPos.x}px`,
+                              top: `${isoPos.y}px`,
+                              width: `${TILE_WIDTH}px`,
+                              height: `${TILE_HEIGHT}px`,
+                              transform: 'translate(-50%, -50%)',
+                              zIndex: getZIndex(colIndex, rowIndex, GRID_SIZE) + 2000, // Above buildings
+                              cursor: placementMode !== 'view' ? 'pointer' : 'default',
+                              border: highlightClass ? '2px solid' : 'none',
+                            }}
+                            className={highlightClass}
+                            onClick={() => handleCellClick(rowIndex, colIndex)}
+                            onMouseEnter={() => setHoveredCell({ x: colIndex, y: rowIndex })}
+                            onMouseLeave={() => {
+                              if (placementMode !== 'view') {
+                                setHoveredCell(null);
+                              }
+                            }}
+                            role="button"
+                            tabIndex={0}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                handleCellClick(rowIndex, colIndex);
+                              }
+                            }}
+                          />
+                        );
+                      })
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           </div>
         </div>

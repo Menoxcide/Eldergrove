@@ -9,7 +9,7 @@ interface QueuedOperation {
   id: string;
   operation: () => Promise<void>;
   resolve: (value: void) => void;
-  reject: (reason: any) => void;
+  reject: (reason: unknown) => void;
   description: string;
 }
 
@@ -39,8 +39,6 @@ class CrystalTransactionManager {
       };
 
       this.operationQueue.push(queuedOp);
-      console.log(`[CrystalTransactionManager] Queued operation: ${description} (ID: ${operationId})`);
-
       this.processQueue();
     });
   }
@@ -59,9 +57,7 @@ class CrystalTransactionManager {
       const currentOp = this.operationQueue.shift()!;
 
       try {
-        console.log(`[CrystalTransactionManager] Executing operation: ${currentOp.description} (ID: ${currentOp.id})`);
         await currentOp.operation();
-        console.log(`[CrystalTransactionManager] Operation completed successfully: ${currentOp.description} (ID: ${currentOp.id})`);
         currentOp.resolve();
       } catch (error) {
         console.error(`[CrystalTransactionManager] Operation failed: ${currentOp.description} (ID: ${currentOp.id})`, error);

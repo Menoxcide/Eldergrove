@@ -8,6 +8,7 @@ import { getItemIcon, getItemName, getItemCategory, getCategoryName, type ItemCa
 import { createClient } from '@/lib/supabase/client';
 import { Skeleton } from '@/components/ui/LoadingSkeleton';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
+import { crystalTransactionManager } from '@/lib/crystalTransactionManager';
 
 interface MarketplaceItem {
   item_id: number;
@@ -44,7 +45,7 @@ export default function InventoryPage() {
 
       if (error) throw error;
       setMarketplace(data || []);
-    } catch (error: any) {
+    } catch (error: unknown) {
       handleError(error, 'Failed to load marketplace prices');
     }
   };
@@ -70,30 +71,32 @@ export default function InventoryPage() {
 
     setSelling(showSellModal.itemId);
     try {
-      const supabase = createClient();
-      const { data, error } = await supabase.rpc('sell_item', {
-        p_item_id: showSellModal.itemId,
-        p_quantity: quantity
-      });
+      await crystalTransactionManager.executeCrystalOperation(async () => {
+        const supabase = createClient();
+        const { data, error } = await supabase.rpc('sell_item', {
+          p_item_id: showSellModal.itemId,
+          p_quantity: quantity
+        });
 
-      if (error) throw error;
+        if (error) throw error;
 
-      const result = data as { success: boolean; crystals_awarded: number; new_crystal_balance: number };
-      
-      if (result.success) {
-        const { useGameMessageStore } = await import('@/stores/useGameMessageStore');
-        useGameMessageStore.getState().addMessage(
-          'success',
-          `Sold ${quantity} ${showSellModal.name} for ${result.crystals_awarded} crystals!`
-        );
-        // Use the returned crystal balance directly to avoid race conditions
-        setCrystals(result.new_crystal_balance);
-        await fetchInventory();
-        setShowSellModal(null);
-        setSellQuantity('1');
-      }
-    } catch (error: any) {
-      handleError(error, error.message);
+        const result = data as { success: boolean; crystals_awarded: number; new_crystal_balance: number };
+
+        if (result.success) {
+          const { useGameMessageStore } = await import('@/stores/useGameMessageStore');
+          useGameMessageStore.getState().addMessage(
+            'success',
+            `Sold ${quantity} ${showSellModal.name} for ${result.crystals_awarded} crystals!`
+          );
+          setCrystals(result.new_crystal_balance);
+          await fetchInventory();
+          setShowSellModal(null);
+          setSellQuantity('1');
+        }
+      }, `Sell ${quantity} ${showSellModal.name}`);
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to sell item'
+      handleError(error, errorMessage);
     } finally {
       setSelling(null);
     }

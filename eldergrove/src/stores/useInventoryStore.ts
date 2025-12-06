@@ -49,8 +49,6 @@ export const useInventoryStore = create<InventoryState>((set, get) => ({
   setInventory: (inventory) => {
     const { previousInventory } = get();
     
-    // Only show messages if this is not the initial load (previousInventory is not empty)
-    // This prevents showing messages for all items when the game restarts
     if (previousInventory.length > 0) {
       // Check for new items or quantity increases
       inventory.forEach((item) => {
@@ -121,9 +119,7 @@ export const useInventoryStore = create<InventoryState>((set, get) => ({
         }
       )
       .subscribe((status) => {
-        if (status === 'SUBSCRIBED') {
-          console.log('Subscribed to inventory updates')
-        } else if (status === 'CHANNEL_ERROR') {
+        if (status === 'CHANNEL_ERROR') {
           const { setError } = get()
           setError('Failed to subscribe to real-time updates')
           console.error('Subscription error for inventory')

@@ -1,0 +1,81 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="skyGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#1e293b;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#0f172a;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="treeGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#65a30d;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#84cc16;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#65a30d;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="trunkGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#854d0e;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#713f12;stop-opacity:1" />
+    </linearGradient>
+    <radialGradient id="magicGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" style="stop-color:#a855f7;stop-opacity:0.5" />
+      <stop offset="100%" style="stop-color:#a855f7;stop-opacity:0" />
+    </radialGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  
+  <!-- Background -->
+  <rect width="512" height="512" fill="url(#skyGradient)" rx="80"/>
+  
+  <!-- Ground -->
+  <rect x="0" y="384" width="512" height="128" fill="#365314"/>
+  <rect x="0" y="416" width="512" height="96" fill="#3f6212"/>
+  
+  <!-- Magic glow effect -->
+  <circle cx="256" cy="224" r="160" fill="url(#magicGlow)"/>
+  
+  <!-- Main elder tree trunk -->
+  <rect x="224" y="320" width="64" height="96" fill="url(#trunkGradient)" rx="16"/>
+  
+  <!-- Tree foliage - layered circles for depth -->
+  <!-- Back layer -->
+  <circle cx="192" cy="224" r="64" fill="#4d7c0f" opacity="0.8"/>
+  <circle cx="320" cy="224" r="64" fill="#4d7c0f" opacity="0.8"/>
+  <circle cx="256" cy="176" r="64" fill="#4d7c0f" opacity="0.8"/>
+  <circle cx="208" cy="192" r="48" fill="#4d7c0f" opacity="0.7"/>
+  <circle cx="304" cy="192" r="48" fill="#4d7c0f" opacity="0.7"/>
+  
+  <!-- Middle layer -->
+  <circle cx="192" cy="224" r="56" fill="url(#treeGradient)"/>
+  <circle cx="320" cy="224" r="56" fill="url(#treeGradient)"/>
+  <circle cx="256" cy="176" r="56" fill="url(#treeGradient)"/>
+  <circle cx="208" cy="192" r="44" fill="url(#treeGradient)"/>
+  <circle cx="304" cy="192" r="44" fill="url(#treeGradient)"/>
+  
+  <!-- Front layer highlights -->
+  <circle cx="208" cy="208" r="40" fill="#a3e635" opacity="0.6"/>
+  <circle cx="304" cy="208" r="40" fill="#a3e635" opacity="0.6"/>
+  <circle cx="256" cy="160" r="40" fill="#a3e635" opacity="0.6"/>
+  <circle cx="224" cy="200" r="32" fill="#d9f99d" opacity="0.5"/>
+  <circle cx="288" cy="200" r="32" fill="#d9f99d" opacity="0.5"/>
+  
+  <!-- Magical sparkles/stars -->
+  <circle cx="144" cy="144" r="12" fill="#fbbf24" filter="url(#glow)"/>
+  <circle cx="368" cy="144" r="12" fill="#fbbf24" filter="url(#glow)"/>
+  <circle cx="160" cy="288" r="8" fill="#a855f7" filter="url(#glow)"/>
+  <circle cx="352" cy="288" r="8" fill="#a855f7" filter="url(#glow)"/>
+  <circle cx="256" cy="96" r="12" fill="#fbbf24" filter="url(#glow)"/>
+  <circle cx="112" cy="240" r="6" fill="#ec4899" filter="url(#glow)"/>
+  <circle cx="400" cy="240" r="6" fill="#ec4899" filter="url(#glow)"/>
+  
+  <!-- Small plants/grass at base -->
+  <path d="M 160 384 L 176 352 L 192 384 Z" fill="#65a30d"/>
+  <path d="M 320 384 L 336 352 L 352 384 Z" fill="#65a30d"/>
+  <path d="M 224 384 L 232 368 L 240 384 Z" fill="#84cc16"/>
+  <path d="M 272 384 L 280 368 L 288 384 Z" fill="#84cc16"/>
+  <path d="M 192 384 L 200 376 L 208 384 Z" fill="#a3e635"/>
+  <path d="M 304 384 L 312 376 L 320 384 Z" fill="#a3e635"/>
+</svg>
+

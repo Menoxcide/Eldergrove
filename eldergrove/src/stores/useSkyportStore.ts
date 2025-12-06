@@ -79,8 +79,8 @@ export const useSkyportStore = create<SkyportState>((set, get) => ({
         })
       
       setOrders(orders)
-    } catch (err: any) {
-      const errorMessage = err?.message || 'Failed to fetch skyport orders'
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to fetch skyport orders'
       setError(errorMessage)
       handleError(err, errorMessage)
     } finally {
@@ -110,8 +110,8 @@ export const useSkyportStore = create<SkyportState>((set, get) => ({
       }
       const { useGameMessageStore } = await import('@/stores/useGameMessageStore')
       useGameMessageStore.getState().addMessage('success', 'New orders generated!')
-    } catch (err: any) {
-      const errorMessage = err.message || 'An unexpected error occurred while generating orders'
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'An unexpected error occurred while generating orders'
       console.error('Failed to generate skyport orders:', err)
       setError(errorMessage)
       handleError(err, errorMessage)
@@ -135,7 +135,6 @@ export const useSkyportStore = create<SkyportState>((set, get) => ({
         if (result.new_crystal_balance < 0) {
           throw new Error('Transaction would result in negative crystal balance')
         }
-        // Use the returned crystal balance directly to avoid race conditions
         if (result.new_crystal_balance !== null && result.new_crystal_balance !== undefined) {
           const playerStore = usePlayerStore.getState()
           playerStore.setCrystals(result.new_crystal_balance)
@@ -164,9 +163,7 @@ export const useSkyportStore = create<SkyportState>((set, get) => ({
         }
       )
       .subscribe((status) => {
-        if (status === 'SUBSCRIBED') {
-          console.log('Subscribed to skyport orders')
-        } else if (status === 'CHANNEL_ERROR') {
+        if (status === 'CHANNEL_ERROR') {
           const { setError } = get()
           setError('Failed to subscribe to real-time updates')
           console.error('Subscription error for skyport orders')

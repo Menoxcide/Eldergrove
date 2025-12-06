@@ -32,16 +32,23 @@ const Tooltip: React.FC<TooltipProps> = ({
   const [isVisible, setIsVisible] = useState(false);
   const [calculatedPosition, setCalculatedPosition] = useState<TooltipPosition>('top');
   const [tooltipStyle, setTooltipStyle] = useState<React.CSSProperties>({});
+  const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLElement>(null);
   const positionUpdateRef = useRef<number | null>(null);
+  const tooltipId = useRef(`tooltip-${Math.random().toString(36).substr(2, 9)}`);
 
-  const showTooltip = () => {
+  const isMobile = typeof window !== 'undefined' && ('ontouchstart' in window || navigator.maxTouchPoints > 0);
+
+  const showTooltip = (x?: number, y?: number) => {
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
     }
     timeoutRef.current = setTimeout(() => {
+      if (x !== undefined && y !== undefined) {
+        setMousePosition({ x, y });
+      }
       setIsVisible(true);
     }, delay);
   };
@@ -59,69 +66,77 @@ const Tooltip: React.FC<TooltipProps> = ({
   };
 
   const calculatePosition = useCallback(() => {
-    if (!isVisible || !tooltipRef.current || !triggerRef.current) {
+    if (!isVisible || !tooltipRef.current) {
       return;
     }
 
     const tooltip = tooltipRef.current;
-    const trigger = triggerRef.current;
     const tooltipRect = tooltip.getBoundingClientRect();
-    
+
     if (tooltipRect.width === 0 || tooltipRect.height === 0) {
       positionUpdateRef.current = requestAnimationFrame(calculatePosition);
       return;
     }
 
-    const rect = trigger.getBoundingClientRect();
     const viewportWidth = window.innerWidth;
     const viewportHeight = window.innerHeight;
     const spacing = 8;
 
-    let finalPosition: TooltipPosition = position === 'auto' ? 'top' : position;
+    let top = mousePosition.y;
+    let left = mousePosition.x;
 
-    if (position === 'auto') {
-      const spaceTop = rect.top;
-      const spaceBottom = viewportHeight - rect.bottom;
-      const spaceLeft = rect.left;
-      const spaceRight = viewportWidth - rect.right;
+    // Adjust position based on preferred position or auto
+    if (position !== 'auto') {
+      switch (position) {
+        case 'top':
+          top = mousePosition.y - tooltipRect.height - spacing;
+          left = mousePosition.x - tooltipRect.width / 2;
+          break;
+        case 'bottom':
+          top = mousePosition.y + spacing;
+          left = mousePosition.x - tooltipRect.width / 2;
+          break;
+        case 'left':
+          top = mousePosition.y - tooltipRect.height / 2;
+          left = mousePosition.x - tooltipRect.width - spacing;
+          break;
+        case 'right':
+          top = mousePosition.y - tooltipRect.height / 2;
+          left = mousePosition.x + spacing;
+          break;
+      }
+    } else {
+      // Auto positioning: prefer bottom, then top, right, left
+      const spaceBottom = viewportHeight - mousePosition.y;
+      const spaceTop = mousePosition.y;
+      const spaceRight = viewportWidth - mousePosition.x;
+      const spaceLeft = mousePosition.x;
 
       if (spaceBottom >= tooltipRect.height + spacing) {
-        finalPosition = 'bottom';
+        top = mousePosition.y + spacing;
+        left = mousePosition.x - tooltipRect.width / 2;
+        setCalculatedPosition('bottom');
       } else if (spaceTop >= tooltipRect.height + spacing) {
-        finalPosition = 'top';
+        top = mousePosition.y - tooltipRect.height - spacing;
+        left = mousePosition.x - tooltipRect.width / 2;
+        setCalculatedPosition('top');
       } else if (spaceRight >= tooltipRect.width + spacing) {
-        finalPosition = 'right';
+        top = mousePosition.y - tooltipRect.height / 2;
+        left = mousePosition.x + spacing;
+        setCalculatedPosition('right');
       } else if (spaceLeft >= tooltipRect.width + spacing) {
-        finalPosition = 'left';
+        top = mousePosition.y - tooltipRect.height / 2;
+        left = mousePosition.x - tooltipRect.width - spacing;
+        setCalculatedPosition('left');
       } else {
-        finalPosition = 'bottom';
+        // Fallback to bottom
+        top = mousePosition.y + spacing;
+        left = mousePosition.x - tooltipRect.width / 2;
+        setCalculatedPosition('bottom');
       }
     }
 
-    setCalculatedPosition(finalPosition);
-
-    let top = 0;
-    let left = 0;
-
-    switch (finalPosition) {
-      case 'top':
-        top = rect.top - tooltipRect.height - spacing;
-        left = rect.left + rect.width / 2 - tooltipRect.width / 2;
-        break;
-      case 'bottom':
-        top = rect.bottom + spacing;
-        left = rect.left + rect.width / 2 - tooltipRect.width / 2;
-        break;
-      case 'left':
-        top = rect.top + rect.height / 2 - tooltipRect.height / 2;
-        left = rect.left - tooltipRect.width - spacing;
-        break;
-      case 'right':
-        top = rect.top + rect.height / 2 - tooltipRect.height / 2;
-        left = rect.right + spacing;
-        break;
-    }
-
+    // Ensure tooltip stays within viewport
     left = Math.max(8, Math.min(left, viewportWidth - tooltipRect.width - 8));
     top = Math.max(8, Math.min(top, viewportHeight - tooltipRect.height - 8));
 
@@ -131,13 +146,11 @@ const Tooltip: React.FC<TooltipProps> = ({
       left: `${left}px`,
       zIndex: 9999,
     });
-  }, [isVisible, position]);
+  }, [isVisible, position, mousePosition]);
 
   useEffect(() => {
     if (isVisible) {
-      positionUpdateRef.current = requestAnimationFrame(() => {
-        positionUpdateRef.current = requestAnimationFrame(calculatePosition);
-      });
+      positionUpdateRef.current = requestAnimationFrame(calculatePosition);
     }
 
     return () => {
@@ -146,7 +159,7 @@ const Tooltip: React.FC<TooltipProps> = ({
         positionUpdateRef.current = null;
       }
     };
-  }, [isVisible, position, calculatePosition]);
+  }, [isVisible, calculatePosition]);
 
   useEffect(() => {
     if (!isVisible) return;
@@ -211,6 +224,22 @@ const Tooltip: React.FC<TooltipProps> = ({
 
   const childProps = children.props as Record<string, any>;
   const originalRef = (children as React.ReactElement & { ref?: React.Ref<HTMLElement> }).ref;
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    setMousePosition({ x: e.clientX, y: e.clientY });
+  };
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    const touch = e.touches[0];
+    setMousePosition({ x: touch.clientX, y: touch.clientY });
+    showTooltip(touch.clientX, touch.clientY);
+    e.preventDefault(); // Prevent mouse events
+  };
+
+  const handleTouchEnd = () => {
+    hideTooltip();
+  };
+
   const childWithRef = React.cloneElement<any>(children, {
     ref: (node: HTMLElement | null) => {
       triggerRef.current = node;
@@ -220,22 +249,38 @@ const Tooltip: React.FC<TooltipProps> = ({
         (originalRef as React.MutableRefObject<HTMLElement | null>).current = node;
       }
     },
-    onMouseEnter: (e: React.MouseEvent) => {
-      showTooltip();
-      childProps.onMouseEnter?.(e);
-    },
-    onMouseLeave: (e: React.MouseEvent) => {
-      hideTooltip();
-      childProps.onMouseLeave?.(e);
-    },
-    onFocus: (e: React.FocusEvent) => {
-      showTooltip();
-      childProps.onFocus?.(e);
-    },
-    onBlur: (e: React.FocusEvent) => {
-      hideTooltip();
-      childProps.onBlur?.(e);
-    },
+    'aria-describedby': isVisible ? tooltipId.current : undefined,
+    ...(isMobile ? {
+      onTouchStart: (e: React.TouchEvent) => {
+        handleTouchStart(e);
+        childProps.onTouchStart?.(e);
+      },
+      onTouchEnd: (e: React.TouchEvent) => {
+        handleTouchEnd();
+        childProps.onTouchEnd?.(e);
+      },
+    } : {
+      onMouseEnter: (e: React.MouseEvent) => {
+        showTooltip(e.clientX, e.clientY);
+        childProps.onMouseEnter?.(e);
+      },
+      onMouseLeave: (e: React.MouseEvent) => {
+        hideTooltip();
+        childProps.onMouseLeave?.(e);
+      },
+      onMouseMove: (e: React.MouseEvent) => {
+        handleMouseMove(e);
+        childProps.onMouseMove?.(e);
+      },
+      onFocus: (e: React.FocusEvent) => {
+        showTooltip();
+        childProps.onFocus?.(e);
+      },
+      onBlur: (e: React.FocusEvent) => {
+        hideTooltip();
+        childProps.onBlur?.(e);
+      },
+    }),
   });
 
   return (
@@ -244,6 +289,7 @@ const Tooltip: React.FC<TooltipProps> = ({
       {isVisible &&
         createPortal(
           <div
+            id={tooltipId.current}
             ref={tooltipRef}
             style={tooltipStyle}
             className={`pointer-events-none transition-opacity duration-200 ${
@@ -276,4 +322,3 @@ const Tooltip: React.FC<TooltipProps> = ({
 };
 
 export default Tooltip;
-

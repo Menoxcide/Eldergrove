@@ -12,11 +12,5 @@ if (!supabaseUrl || !supabaseKey) {
 }
 
 export const createClient = () => {
-  try {
-    const client = createBrowserClient(supabaseUrl, supabaseKey);
-    return client;
-  } catch (error) {
-    console.error('Failed to create Supabase client:', error);
-    throw error;
-  }
+  return createBrowserClient(supabaseUrl, supabaseKey);
 }

@@ -88,7 +88,7 @@ export default function MinePage() {
   const handleMine = async () => {
     try {
       await mineOre(selectedTool);
-    } catch (error) {
+    } catch {
       // Error handled in store
     }
   };
@@ -97,7 +97,7 @@ export default function MinePage() {
     try {
       await repairTool(toolType);
       setShowRepairModal(null);
-    } catch (error) {
+    } catch {
       // Error handled in store
     }
   };
@@ -110,7 +110,7 @@ export default function MinePage() {
       if (nextTool) {
         setSelectedTool(nextTool);
       }
-    } catch (error) {
+    } catch {
       // Error handled in store
     }
   };
@@ -130,7 +130,7 @@ export default function MinePage() {
     try {
       await restoreEnergyWithCrystals();
       await fetchMineDig(); // Refresh mining state
-    } catch (error) {
+    } catch {
       // Error handled in store
     } finally {
       setRestoringEnergy(false);

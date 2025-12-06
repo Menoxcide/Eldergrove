@@ -45,7 +45,7 @@ export default function RegattaPage() {
     if (!currentRegatta) return;
     try {
       await joinRegatta(currentRegatta.id);
-    } catch (error) {
+    } catch {
       // Error handled in store
     }
   };
@@ -54,7 +54,7 @@ export default function RegattaPage() {
     if (!currentRegatta) return;
     try {
       await submitTask(currentRegatta.id, taskIndex);
-    } catch (error) {
+    } catch {
       // Error handled in store
     }
   };
@@ -63,7 +63,7 @@ export default function RegattaPage() {
     if (!currentRegatta) return;
     try {
       await claimRewards(currentRegatta.id);
-    } catch (error) {
+    } catch {
       // Error handled in store
     }
   };

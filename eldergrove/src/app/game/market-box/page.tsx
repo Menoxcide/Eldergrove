@@ -56,7 +56,7 @@ export default function MarketBoxPage() {
       setSelectedItem(null);
       setPrice('');
       setQuantity('');
-    } catch (error) {
+    } catch {
       // Error handled in store
     }
   };

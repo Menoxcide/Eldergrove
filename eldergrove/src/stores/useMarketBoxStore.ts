@@ -63,8 +63,8 @@ export const useMarketBoxStore = create<MarketBoxState>((set, get) => ({
         .limit(50)
       if (error) throw error
       setListings(data || [])
-    } catch (err: any) {
-      const errorMessage = err?.message || 'Failed to fetch listings'
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to fetch listings'
       setError(errorMessage)
       handleError(err, errorMessage)
     } finally {
@@ -89,8 +89,8 @@ export const useMarketBoxStore = create<MarketBoxState>((set, get) => ({
         .order('created_at', { ascending: false })
       if (error) throw error
       setMyListings(data || [])
-    } catch (err: any) {
-      const errorMessage = err?.message || 'Failed to fetch my listings'
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to fetch my listings'
       setError(errorMessage)
       handleError(err, errorMessage)
     } finally {
@@ -112,11 +112,10 @@ export const useMarketBoxStore = create<MarketBoxState>((set, get) => ({
       useGameMessageStore.getState().addMessage('success', 'Listing created!')
       await fetchMyListings()
       await fetchListings()
-      // Refresh inventory
       const { useInventoryStore } = await import('./useInventoryStore')
       useInventoryStore.getState().fetchInventory()
-    } catch (err: any) {
-      const errorMessage = err?.message || 'Failed to create listing'
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to create listing'
       setError(errorMessage)
       handleError(err, errorMessage)
       throw err
@@ -147,7 +146,6 @@ export const useMarketBoxStore = create<MarketBoxState>((set, get) => ({
         if (result.new_crystal_balance < 0) {
           throw new Error('Transaction would result in negative crystal balance')
         }
-        // Use the returned crystal balance directly to avoid race conditions
         if (result.new_crystal_balance !== null && result.new_crystal_balance !== undefined) {
           usePlayerStore.getState().setCrystals(result.new_crystal_balance)
         }
@@ -157,7 +155,6 @@ export const useMarketBoxStore = create<MarketBoxState>((set, get) => ({
           `Purchased ${result.quantity} items for ${result.cost} crystals!`
         )
         await fetchListings()
-        // Refresh inventory
         const { useInventoryStore } = await import('./useInventoryStore')
         useInventoryStore.getState().fetchInventory()
       }
@@ -175,11 +172,10 @@ export const useMarketBoxStore = create<MarketBoxState>((set, get) => ({
       useGameMessageStore.getState().addMessage('success', 'Listing cancelled! Items returned to inventory.')
       await fetchMyListings()
       await fetchListings()
-      // Refresh inventory
       const { useInventoryStore } = await import('./useInventoryStore')
       useInventoryStore.getState().fetchInventory()
-    } catch (err: any) {
-      const errorMessage = err?.message || 'Failed to cancel listing'
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to cancel listing'
       setError(errorMessage)
       handleError(err, errorMessage)
       throw err
@@ -202,9 +198,7 @@ export const useMarketBoxStore = create<MarketBoxState>((set, get) => ({
         }
       )
       .subscribe((status) => {
-        if (status === 'SUBSCRIBED') {
-          console.log('Subscribed to market box updates')
-        } else if (status === 'CHANNEL_ERROR') {
+        if (status === 'CHANNEL_ERROR') {
           const { setError } = get()
           setError('Failed to subscribe to real-time updates')
           console.error('Subscription error for market box')

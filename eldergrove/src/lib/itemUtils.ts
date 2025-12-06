@@ -50,6 +50,10 @@ export const getItemIcon = (itemId: number): string => {
     108: '🌿',  // Herbs Seed
     109: '🍄',  // Magic Mushroom Seed
     110: '🌸',  // Enchanted Flower Seed
+    111: '🍓',  // Berry Seed
+    112: '🌿',  // Herbs Seed
+    113: '🍄',  // Magic Mushroom Seed
+    114: '🌸',  // Enchanted Flower Seed
   };
   return iconMap[itemId] || '📦';
 };
@@ -104,6 +108,10 @@ export const getItemName = (itemId: number): string => {
     108: 'Herbs Seed',
     109: 'Magic Mushroom Seed',
     110: 'Enchanted Flower Seed',
+    111: 'Berry Seed',
+    112: 'Herbs Seed',
+    113: 'Magic Mushroom Seed',
+    114: 'Enchanted Flower Seed',
   };
   return itemNames[itemId] || `Item ${itemId}`;
 };
@@ -111,40 +119,45 @@ export const getItemName = (itemId: number): string => {
 export type ItemCategory = 'seeds' | 'crops' | 'production' | 'ore' | 'equipment' | 'other';
 
 export const getItemCategory = (itemId: number): ItemCategory => {
-  // Seeds: 100-110 (crops 1-10) and 111-114 (crops 11-14)
   if ((itemId >= 100 && itemId <= 110) || (itemId >= 111 && itemId <= 114)) {
     return 'seeds';
   }
-  
-  // Crops: 1-6 (Wheat, Carrot, Potato, Tomato, Corn, Pumpkin) and 11-14 (Berry, Herbs, Magic Mushroom, Enchanted Flower)
+
   const cropIds = [1, 2, 3, 4, 5, 6, 11, 12, 13, 14];
   if (cropIds.includes(itemId)) {
     return 'crops';
   }
-  
-  // Production items: 7-10 (Minor Healing Potion, Bread, Magic Essence, Enchanted Seeds) and 15-19 (Herbal Tea, Magic Potion, Fruit Salad, Crystals)
+
   const productionIds = [7, 8, 9, 10, 15, 16, 17, 18, 19];
   if (productionIds.includes(itemId)) {
     return 'production';
   }
-  
-  // Ore: 20-29
+
   if (itemId >= 20 && itemId <= 29) {
     return 'ore';
   }
-  // Equipment: 30-39
   if (itemId >= 30 && itemId <= 39) {
     return 'equipment';
   }
   return 'other';
 };
 
+export const getCategoryName = (category: ItemCategory): string => {
+  switch (category) {
+    case 'seeds': return 'Seeds';
+    case 'crops': return 'Crops';
+    case 'production': return 'Production';
+    case 'ore': return 'Ore';
+    case 'equipment': return 'Equipment';
+    case 'other': return 'Other';
+  }
+};
+
 export const isSeed = (itemId: number): boolean => {
-  return itemId >= 100 && itemId <= 110;
+  return itemId >= 100 && itemId <= 114;
 };
 
 export const isCrop = (itemId: number): boolean => {
-  // Crops: 1-6 (Wheat, Carrot, Potato, Tomato, Corn, Pumpkin) and 11-14 (Berry, Herbs, Magic Mushroom, Enchanted Flower)
   const cropIds = [1, 2, 3, 4, 5, 6, 11, 12, 13, 14];
   return cropIds.includes(itemId);
 };
@@ -154,7 +167,6 @@ export const isOre = (itemId: number): boolean => {
 };
 
 export const isProductionItem = (itemId: number): boolean => {
-  // Production items: 7-10 (Minor Healing Potion, Bread, Magic Essence, Enchanted Seeds) and 15-19 (Herbal Tea, Magic Potion, Fruit Salad, Crystals)
   const productionIds = [7, 8, 9, 10, 15, 16, 17, 18, 19];
   return productionIds.includes(itemId);
 };
@@ -164,23 +176,17 @@ export const isEquipment = (itemId: number): boolean => {
 };
 
 export const isFinishedProductionItem = (itemId: number): boolean => {
-  // Production items (11-19) are finished items that can only be sold
-  return itemId >= 11 && itemId <= 19;
+  return (itemId >= 7 && itemId <= 10) || (itemId >= 15 && itemId <= 19);
 };
 
-// Helper functions for seed system
 export const getSeedItemId = (cropId: number): number => {
-  // Seeds use item_id 100 + cropId (where cropId maps to crop item_id 1-10)
-  // cropId 1 (Wheat) -> seed item_id 101
   return 100 + cropId;
 };
 
 export const getCropIdFromSeed = (seedItemId: number): number => {
-  // Convert seed item_id back to crop item_id
   return seedItemId - 100;
 };
 
-// Helper functions for leveled animals (item_id format: 1000 + (animal_type_id * 100) + level)
 export const isLeveledAnimal = (itemId: number): boolean => {
   return itemId >= 1000;
 };
@@ -198,16 +204,13 @@ export const getAnimalLevelFromItemId = (itemId: number): number | null => {
 
 export const getAnimalTypeIdFromItemId = (itemId: number): number | null => {
   if (itemId >= 1000) {
-    // New format: 1000 + (animal_type_id * 100) + level
     return Math.floor((itemId - 1000) / 100);
   } else if (itemId >= 30 && itemId < 100) {
-    // Old format: 30 + animal_type_id (level 0)
     return itemId - 30;
   }
   return null;
 };
 
-// Animal type names mapping (should match animal_types table)
 const animalTypeNames: Record<number, string> = {
   1: 'Chicken',
   2: 'Cow',
@@ -220,7 +223,6 @@ const animalTypeNames: Record<number, string> = {
   9: 'Ancient Guardian',
 };
 
-// Animal type icons mapping (should match animal_types table)
 const animalTypeIcons: Record<number, string> = {
   1: '🐔',
   2: '🐄',
@@ -241,7 +243,6 @@ export const getAnimalIcon = (animalTypeId: number): string => {
   return animalTypeIcons[animalTypeId] || '🐾';
 };
 
-// Enhanced getItemName to handle leveled animals
 export const getItemNameWithLevel = (itemId: number): string => {
   const animalTypeId = getAnimalTypeIdFromItemId(itemId);
   if (animalTypeId !== null) {
@@ -255,7 +256,6 @@ export const getItemNameWithLevel = (itemId: number): string => {
   return getItemName(itemId);
 };
 
-// Enhanced getItemIcon to handle leveled animals
 export const getItemIconWithAnimal = (itemId: number): string => {
   const animalTypeId = getAnimalTypeIdFromItemId(itemId);
   if (animalTypeId !== null) {
@@ -264,11 +264,9 @@ export const getItemIconWithAnimal = (itemId: number): string => {
   return getItemIcon(itemId);
 };
 
-// Armory type name formatting - converts technical names to user-friendly display names
 export const getArmoryTypeName = (armoryType: string): string => {
   const armoryTypeNames: Record<string, string> = {
     basic_forge: 'Basic Forge',
-    // Add more armory types here as they're added to the game
   };
   
   return armoryTypeNames[armoryType] || armoryType

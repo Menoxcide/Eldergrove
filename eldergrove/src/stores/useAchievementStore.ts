@@ -64,8 +64,9 @@ export const useAchievementStore = create<AchievementState>((set, get) => ({
         .order('id', { ascending: true })
       if (error) throw error
       setAchievements(data || [])
-    } catch (err: any) {
-      setError(err.message)
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to fetch achievements'
+      setError(errorMessage)
       console.error('Error fetching achievements:', err)
     } finally {
       setLoading(false)
@@ -101,8 +102,9 @@ export const useAchievementStore = create<AchievementState>((set, get) => ({
       }))
 
       setPlayerAchievements(playerAchievementsWithDetails)
-    } catch (err: any) {
-      setError(err.message)
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to fetch player achievements'
+      setError(errorMessage)
       console.error('Error fetching player achievements:', err)
     } finally {
       setLoading(false)
@@ -120,7 +122,6 @@ export const useAchievementStore = create<AchievementState>((set, get) => ({
       const result = data as { success: boolean; crystals_awarded: number; xp_awarded: number; title: string | null; new_crystal_balance: number }
       
       if (result.success) {
-        // Use the returned crystal balance directly to avoid race conditions
         if (result.new_crystal_balance !== null && result.new_crystal_balance !== undefined) {
           const playerStore = usePlayerStore.getState()
           playerStore.setCrystals(result.new_crystal_balance)
@@ -133,9 +134,10 @@ export const useAchievementStore = create<AchievementState>((set, get) => ({
         )
         await fetchPlayerAchievements()
       }
-    } catch (err: any) {
-      setError(err.message)
-      handleError(err, err.message)
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to claim achievement'
+      setError(errorMessage)
+      handleError(err, errorMessage)
       throw err
     }
   },

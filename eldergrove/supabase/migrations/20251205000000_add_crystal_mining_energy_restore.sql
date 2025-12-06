@@ -6,7 +6,7 @@ CREATE OR REPLACE FUNCTION public.restore_mining_energy_crystals()
 RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public
+SET search_path = ''
 AS $$
 DECLARE
   v_player_id UUID := auth.uid();

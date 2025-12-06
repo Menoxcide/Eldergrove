@@ -59,9 +59,7 @@ const RegisterForm: React.FC = () => {
       return;
     }
     
-    // Check if user was created or if confirmation email was sent
     if (data.user) {
-      // Check if user is automatically signed in after registration
       const { data: { session } } = await supabase.auth.getSession();
 
       if (session) {
@@ -82,9 +80,9 @@ const RegisterForm: React.FC = () => {
     try {
       const { error } = await signInWithGoogle();
       if (error) throw error;
-      // Note: signInWithGoogle now handles the redirect, so we don't need to do anything here
-    } catch (err: any) {
-      setError(err.message || 'Failed to sign in with Google');
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to sign in with Google'
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }

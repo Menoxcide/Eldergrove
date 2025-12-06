@@ -3,7 +3,6 @@ import { getItemName, getItemIcon, getItemCategory, getCategoryName } from '@/li
 
 // Resource Tooltips
 export const getCrystalsTooltip = (crystals: number, level: number): TooltipSection[] => {
-  const nextLevelCost = Math.floor(100 * Math.pow(1.5, level));
   return [
     {
       title: 'Crystals',
@@ -41,10 +40,13 @@ export const getCrystalsTooltip = (crystals: number, level: number): TooltipSect
 };
 
 export const getLevelTooltip = (level: number, xp: number): TooltipSection[] => {
-  const xpForCurrentLevel = Math.floor(100 * Math.pow(1.5, level - 1));
-  const xpForNextLevel = Math.floor(100 * Math.pow(1.5, level));
-  const xpNeeded = xpForNextLevel - xp;
-  const progress = ((xp - xpForCurrentLevel) / (xpForNextLevel - xpForCurrentLevel)) * 100;
+  // Database formula: XP needed for next level = current_level * 1000
+  // Level 1 -> 2: 1000 XP, Level 2 -> 3: 2000 XP, etc.
+  const xpForNextLevel = level * 1000;
+  const xpNeeded = Math.max(0, xpForNextLevel - xp);
+  // Progress is calculated as: (current_xp % (level * 1000)) / (level * 1000) * 100
+  // But since XP resets to 0 after leveling, we use: (xp % xpForNextLevel) / xpForNextLevel * 100
+  const progress = xpForNextLevel > 0 ? ((xp % xpForNextLevel) / xpForNextLevel) * 100 : 0;
 
   return [
     {
@@ -66,8 +68,8 @@ export const getLevelTooltip = (level: number, xp: number): TooltipSection[] => 
               />
             </div>
             <div className="flex justify-between text-xs">
-              <span>{xp.toLocaleString()} / {xpForNextLevel.toLocaleString()} XP</span>
-              <span className="text-yellow-400">{xpNeeded > 0 ? `${xpNeeded.toLocaleString()} more` : 'Max Level!'}</span>
+              <span>{(xp % xpForNextLevel).toLocaleString()} / {xpForNextLevel.toLocaleString()} XP</span>
+              <span className="text-yellow-400">{xpNeeded > 0 ? `${xpNeeded.toLocaleString()} more` : 'Ready to Level Up!'}</span>
             </div>
           </div>
           <div className="border-t border-slate-700 pt-2 mt-2">
@@ -95,8 +97,9 @@ export const getLevelTooltip = (level: number, xp: number): TooltipSection[] => 
 };
 
 export const getXPTooltip = (xp: number, level: number): TooltipSection[] => {
-  const xpForNextLevel = Math.floor(100 * Math.pow(1.5, level));
-  const xpNeeded = xpForNextLevel - xp;
+  // Database formula: XP needed for next level = current_level * 1000
+  const xpForNextLevel = level * 1000;
+  const xpNeeded = Math.max(0, xpForNextLevel - xp);
 
   return [
     {

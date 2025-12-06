@@ -33,7 +33,7 @@ export function ErrorToast({ error, onClose }: ErrorToastProps) {
             {error.details.maxSlots !== undefined && (
               <div className="flex items-center gap-2 text-xs bg-red-950/50 px-2 py-1 rounded">
                 <span className="text-red-200">Slots:</span>
-                <span className="text-white font-semibold">{error.details.currentSlots || 0}/{error.details.maxSlots}</span>
+                <span className="text-white font-semibold">{error.details.currentSlots ?? error.details.maxSlots}/{error.details.maxSlots}</span>
               </div>
             )}
             

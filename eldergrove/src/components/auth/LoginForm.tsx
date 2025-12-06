@@ -31,7 +31,6 @@ const LoginForm: React.FC = () => {
       setMessage(msg);
     }
 
-    // Check if user is already logged in and redirect to game
     const checkSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (session) {
@@ -84,7 +83,6 @@ const LoginForm: React.FC = () => {
     try {
       const { error } = await signInWithGoogle();
       if (error) throw error;
-      // Note: signInWithGoogle now handles the redirect, so we don't need to do anything here
     } catch (err: unknown) {
       if (err instanceof Error) {
         setError(err.message || 'Failed to sign in with Google');

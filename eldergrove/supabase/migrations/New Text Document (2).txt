@@ -1,0 +1,14 @@
+"pixellab": {
+      "command": "npx",
+      "args": [
+        "mcp-remote@latest",
+        "https://api.pixellab.ai/mcp",
+        "--transport",
+        "http-only",
+        "--header",
+        "Authorization:${AUTH_HEADER}"
+      ],
+      "env": {
+        "AUTH_HEADER": "Bearer bca3a428-06fa-4457-aa4d-22655759b3c0"
+      }
+    },

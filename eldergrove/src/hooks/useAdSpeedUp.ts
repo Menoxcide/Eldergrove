@@ -46,7 +46,7 @@ export function useAdSpeedUp() {
   }, [checkEligibility]);
 
   const watchAdForSpeedUp = useCallback(async (
-    productionType: 'farm' | 'factory' | 'zoo',
+    productionType: 'farm' | 'factory' | 'zoo' | 'armory',
     productionId: number,
     minutesReduced: number = AD_SPEED_UP_MINUTES
   ): Promise<void> => {

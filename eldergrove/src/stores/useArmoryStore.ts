@@ -81,8 +81,8 @@ export const useArmoryStore = create<ArmoryState>((set, get) => ({
         .order('armory_type')
       if (error) throw error
       setArmories(data || [])
-    } catch (err: any) {
-      const errorMessage = err?.message || 'Failed to fetch armories'
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to fetch armories'
       setError(errorMessage)
       handleError(err, errorMessage)
     } finally {
@@ -107,8 +107,8 @@ export const useArmoryStore = create<ArmoryState>((set, get) => ({
         .order('slot')
       if (error) throw error
       setQueue(data || [])
-    } catch (err: any) {
-      const errorMessage = err?.message || 'Failed to fetch armory queue'
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to fetch armory queue'
       setError(errorMessage)
       handleError(err, errorMessage)
     } finally {
@@ -129,9 +129,7 @@ export const useArmoryStore = create<ArmoryState>((set, get) => ({
         }
       )
       .subscribe((status) => {
-        if (status === 'SUBSCRIBED') {
-          console.log('Subscribed to armory queue updates')
-        } else if (status === 'CHANNEL_ERROR') {
+        if (status === 'CHANNEL_ERROR') {
           const { setError } = get()
           setError('Failed to subscribe to real-time updates')
           console.error('Subscription error for armory queue')
@@ -157,8 +155,8 @@ export const useArmoryStore = create<ArmoryState>((set, get) => ({
         'success',
         `${recipe_name} crafting started!`
       )
-    } catch (err: any) {
-      const errorMessage = err?.message || 'An unexpected error occurred while starting craft'
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'An unexpected error occurred while starting craft'
       setError(errorMessage)
       handleError(err, errorMessage)
       throw err
@@ -182,19 +180,71 @@ export const useArmoryStore = create<ArmoryState>((set, get) => ({
       
       await fetchQueue()
       playCollectSound()
-      
+
+      // Create descriptive collection message
+      let collectionMessage = 'Equipment Collected!'
+      if (collectionResult.output) {
+        const outputEntries = Object.entries(collectionResult.output)
+        if (outputEntries.length === 1) {
+          const [itemName, quantity] = outputEntries[0]
+          const { getItemName } = await import('@/lib/itemUtils')
+          // Map armory output names to item IDs
+          const itemNameToId: Record<string, number> = {
+            'iron_sword': 30,
+            'steel_blade': 31,
+            'diamond_armor': 32,
+            'mithril_sword': 33,
+            'aether_blade': 34,
+            'dragon_scale_armor': 35,
+            'ancient_relic_weapon': 36
+          }
+          const itemId = itemNameToId[itemName.toLowerCase()]
+          if (itemId) {
+            collectionMessage = `${quantity > 1 ? quantity + 'x ' : ''}${getItemName(itemId)} ${quantity > 1 ? 'Collected' : 'Collected'}!`
+          }
+        } else if (outputEntries.length > 1) {
+          collectionMessage = `${outputEntries.length} Equipment Items Collected!`
+        }
+      }
+
+      // Convert output items to itemIds format for proper display
+      const itemIds: Record<string, number> = {}
+      if (collectionResult.output) {
+        const itemNameToId: Record<string, number> = {
+          'iron_sword': 30,
+          'steel_blade': 31,
+          'diamond_armor': 32,
+          'mithril_sword': 33,
+          'aether_blade': 34,
+          'dragon_scale_armor': 35,
+          'ancient_relic_weapon': 36
+        }
+        Object.entries(collectionResult.output).forEach(([itemName, quantity]) => {
+          const itemId = itemNameToId[itemName.toLowerCase()]
+          if (itemId) {
+            itemIds[itemId.toString()] = quantity
+          }
+        })
+      }
+
       // Show visual feedback
       const { useGameMessageStore } = await import('@/stores/useGameMessageStore')
       useGameMessageStore.getState().addMessage(
         'collection',
-        'Collection Complete!',
+        collectionMessage,
         {
-          items: collectionResult.output,
+          itemIds: itemIds,
           xp: collectionResult.xp_gained > 0 ? collectionResult.xp_gained : undefined,
         }
       )
-    } catch (err: any) {
-      const errorMessage = err?.message || 'An unexpected error occurred while collecting equipment'
+
+      const { useInventoryStore } = await import('@/stores/useInventoryStore')
+      await useInventoryStore.getState().fetchInventory()
+
+      const { usePlayerStore } = await import('@/stores/usePlayerStore')
+      await usePlayerStore.getState().fetchPlayerProfile()
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'An unexpected error occurred while collecting equipment'
       setError(errorMessage)
       handleError(err, errorMessage)
       throw err
@@ -229,8 +279,8 @@ export const useArmoryStore = create<ArmoryState>((set, get) => ({
         }
       })
       setRecipes(recipes)
-    } catch (err: any) {
-      const errorMessage = err?.message || 'Failed to fetch armory recipes'
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to fetch armory recipes'
       setError(errorMessage)
       handleError(err, errorMessage)
     } finally {
@@ -253,8 +303,8 @@ export const useArmoryStore = create<ArmoryState>((set, get) => ({
         .eq('player_id', user.id)
       if (error) throw error
       setInventory(data || [])
-    } catch (err: any) {
-      const errorMessage = err?.message || 'Failed to fetch inventory'
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to fetch inventory'
       setError(errorMessage)
       handleError(err, errorMessage)
     } finally {
@@ -270,9 +320,14 @@ export const useArmoryStore = create<ArmoryState>((set, get) => ({
       })
       if (error) throw error
       
-      const result = data as { success: boolean; new_level: number; cost: number }
+      const result = data as { success: boolean; new_level: number; cost: number; new_crystal_balance?: number }
       
       if (result.success) {
+        // Update crystals from returned balance if available
+        if (result.new_crystal_balance !== null && result.new_crystal_balance !== undefined) {
+          const { usePlayerStore } = await import('@/stores/usePlayerStore')
+          usePlayerStore.getState().setCrystals(result.new_crystal_balance)
+        }
         const { useGameMessageStore } = await import('@/stores/useGameMessageStore')
         useGameMessageStore.getState().addMessage(
           'success',
@@ -280,12 +335,9 @@ export const useArmoryStore = create<ArmoryState>((set, get) => ({
         )
         await fetchArmories()
         await fetchInventory()
-        // Refresh player profile to update crystals
-        const { usePlayerStore } = await import('@/stores/usePlayerStore')
-        await usePlayerStore.getState().fetchPlayerProfile()
       }
-    } catch (err: any) {
-      const errorMessage = err.message || 'An unexpected error occurred while upgrading the armory'
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'An unexpected error occurred while upgrading the armory'
       setError(errorMessage)
       handleError(err, errorMessage)
       throw err

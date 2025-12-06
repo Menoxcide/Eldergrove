@@ -80,8 +80,9 @@ export default function SettingsPage() {
       } else {
         showError('Subscription Failed', 'Failed to subscribe to push notifications. Please try again.');
       }
-    } catch (error: any) {
-      handleError(error, error.message);
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to subscribe to notifications'
+      handleError(error, errorMessage);
     } finally {
       setLoading(false);
     }
@@ -95,8 +96,9 @@ export default function SettingsPage() {
       await updateNotificationPreferences({ [key]: value });
       const { useGameMessageStore } = await import('@/stores/useGameMessageStore');
       useGameMessageStore.getState().addMessage('success', 'Preferences updated');
-    } catch (error: any) {
-      handleError(error, error.message);
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to update preferences'
+      handleError(error, errorMessage);
       // Revert on error
       setPreferences(preferences);
     }

@@ -1,6 +1,3 @@
--- Fix add_animal_to_enclosure function to verify crystal deduction UPDATE succeeds
--- This ensures crystals are properly deducted when adding animals to zoo
-
 CREATE OR REPLACE FUNCTION public.add_animal_to_enclosure(
   p_enclosure_id integer,
   p_animal_type_id integer,
@@ -9,6 +6,7 @@ CREATE OR REPLACE FUNCTION public.add_animal_to_enclosure(
 RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path = ''
 AS $$
 DECLARE
   v_player_id uuid := auth.uid();

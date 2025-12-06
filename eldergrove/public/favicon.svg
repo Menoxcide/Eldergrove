@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <linearGradient id="skyGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#1e293b;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#0f172a;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="treeGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#65a30d;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#84cc16;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#65a30d;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="trunkGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#854d0e;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#713f12;stop-opacity:1" />
+    </linearGradient>
+    <radialGradient id="magicGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" style="stop-color:#a855f7;stop-opacity:0.6" />
+      <stop offset="100%" style="stop-color:#a855f7;stop-opacity:0" />
+    </radialGradient>
+  </defs>
+  
+  <!-- Background -->
+  <rect width="64" height="64" fill="url(#skyGradient)" rx="12"/>
+  
+  <!-- Ground -->
+  <rect x="0" y="48" width="64" height="16" fill="#365314"/>
+  <rect x="0" y="52" width="64" height="12" fill="#3f6212"/>
+  
+  <!-- Magic glow effect -->
+  <circle cx="32" cy="28" r="20" fill="url(#magicGlow)"/>
+  
+  <!-- Main elder tree trunk -->
+  <rect x="28" y="40" width="8" height="12" fill="url(#trunkGradient)" rx="2"/>
+  
+  <!-- Tree foliage - layered circles for depth -->
+  <!-- Back layer -->
+  <circle cx="24" cy="28" r="8" fill="#4d7c0f" opacity="0.8"/>
+  <circle cx="40" cy="28" r="8" fill="#4d7c0f" opacity="0.8"/>
+  <circle cx="32" cy="22" r="8" fill="#4d7c0f" opacity="0.8"/>
+  
+  <!-- Middle layer -->
+  <circle cx="24" cy="28" r="7" fill="url(#treeGradient)"/>
+  <circle cx="40" cy="28" r="7" fill="url(#treeGradient)"/>
+  <circle cx="32" cy="22" r="7" fill="url(#treeGradient)"/>
+  
+  <!-- Front layer highlights -->
+  <circle cx="26" cy="26" r="5" fill="#a3e635" opacity="0.7"/>
+  <circle cx="38" cy="26" r="5" fill="#a3e635" opacity="0.7"/>
+  <circle cx="32" cy="20" r="5" fill="#a3e635" opacity="0.7"/>
+  
+  <!-- Magical sparkles/stars -->
+  <circle cx="18" cy="18" r="1.5" fill="#fbbf24"/>
+  <circle cx="46" cy="18" r="1.5" fill="#fbbf24"/>
+  <circle cx="20" cy="36" r="1" fill="#a855f7"/>
+  <circle cx="44" cy="36" r="1" fill="#a855f7"/>
+  <circle cx="32" cy="12" r="1.5" fill="#fbbf24"/>
+  
+  <!-- Small plants/grass at base -->
+  <path d="M 20 48 L 22 44 L 24 48 Z" fill="#65a30d"/>
+  <path d="M 40 48 L 42 44 L 44 48 Z" fill="#65a30d"/>
+  <path d="M 28 48 L 29 46 L 30 48 Z" fill="#84cc16"/>
+  <path d="M 34 48 L 35 46 L 36 48 Z" fill="#84cc16"/>
+</svg>
+

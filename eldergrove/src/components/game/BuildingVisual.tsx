@@ -1,7 +1,10 @@
 'use client'
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { BuildingType } from '@/stores/useCityStore';
+import { useAssetStore } from '@/stores/useAssetStore';
+import { getBuildingAsset } from '@/config/isometricAssets';
+import { getBuildingIcon, getCategoryColor } from '@/lib/buildingIcons';
 
 interface BuildingVisualProps {
   buildingType: BuildingType;
@@ -9,6 +12,7 @@ interface BuildingVisualProps {
   size?: { width: number; height: number };
   isPreview?: boolean;
   className?: string;
+  useIsometric?: boolean; // Toggle between isometric sprites and CSS rendering
 }
 
 const BuildingVisual: React.FC<BuildingVisualProps> = ({ 
@@ -16,8 +20,123 @@ const BuildingVisual: React.FC<BuildingVisualProps> = ({
   level = 1,
   size,
   isPreview = false,
-  className = ''
+  className = '',
+  useIsometric = false,
 }) => {
+  const [imageLoaded, setImageLoaded] = useState(false);
+  const [imageError, setImageError] = useState(false);
+  const getBuildingAssetUrl = useAssetStore((state) => state.getBuildingAssetUrl);
+  const getCachedImage = useAssetStore((state) => state.getCachedImage);
+  
+  const assetConfig = getBuildingAsset(buildingType.building_type);
+  const assetUrl = useIsometric ? getBuildingAssetUrl(buildingType.building_type) : null;
+  const iconConfig = getBuildingIcon(buildingType.building_type);
+  const categoryColor = getCategoryColor(buildingType.category);
+  
+  useEffect(() => {
+    if (assetUrl && useIsometric) {
+      // Check cache first
+      const cached = getCachedImage(assetUrl);
+      if (cached) {
+        setImageLoaded(true);
+        setImageError(false);
+        return;
+      }
+      
+      setImageLoaded(false);
+      setImageError(false);
+      
+      // Preload image
+      const img = new Image();
+      img.onload = () => setImageLoaded(true);
+      img.onerror = () => setImageError(true);
+      img.src = assetUrl;
+    }
+  }, [assetUrl, useIsometric, getCachedImage]);
+  
+  // Use isometric sprite if available and enabled
+  if (useIsometric && assetUrl && imageLoaded && !imageError) {
+    const displayWidth = size?.width || assetConfig?.width || 64;
+    const displayHeight = size?.height || assetConfig?.height || 64;
+    
+    return (
+      <div 
+        style={{
+          width: `${displayWidth}px`,
+          height: `${displayHeight}px`,
+          position: 'relative',
+          opacity: isPreview ? 0.65 : 1,
+        }}
+        className={className}
+      >
+        <img
+          src={assetUrl}
+          alt={buildingType.name}
+          style={{
+            width: '100%',
+            height: '100%',
+            objectFit: 'contain',
+            imageRendering: 'pixelated',
+            userSelect: 'none',
+            WebkitUserDrag: 'none',
+          } as React.CSSProperties}
+          draggable={false}
+          loading="lazy"
+        />
+        
+        {/* Category badge overlay */}
+        {iconConfig && (
+          <div
+            className="absolute top-0 left-0 text-xs font-bold px-1.5 py-0.5 rounded-br-lg shadow-lg z-20"
+            style={{
+              backgroundColor: iconConfig.badgeColor + 'E6',
+              color: '#fff',
+              fontSize: '9px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '2px',
+            }}
+            title={buildingType.category === 'factory' ? 'Factory' : buildingType.category === 'community' ? 'Community' : 'Decoration'}
+          >
+            <span>{iconConfig.categoryIcon}</span>
+          </div>
+        )}
+        
+        {/* Production/Function indicator */}
+        {iconConfig && (iconConfig.productionIcon || iconConfig.functionIcon) && (
+          <div
+            className="absolute bottom-0 right-0 text-xs px-1.5 py-0.5 rounded-tl-lg z-20"
+            style={{
+              backgroundColor: 'rgba(0, 0, 0, 0.75)',
+              color: '#fff',
+              fontSize: '10px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '2px',
+            }}
+            title={
+              iconConfig.productionIcon
+                ? `Produces: ${buildingType.name}`
+                : iconConfig.functionIcon
+                ? `Provides: ${buildingType.provides_population} population`
+                : ''
+            }
+          >
+            <span>{iconConfig.productionIcon || iconConfig.functionIcon}</span>
+          </div>
+        )}
+        
+        {level > 1 && !isPreview && (
+          <div className="absolute top-0 right-0 bg-gradient-to-br from-yellow-400 to-yellow-600 text-yellow-900 text-xs font-bold px-1.5 py-0.5 rounded-bl-lg border-b-2 border-l-2 border-yellow-700 shadow-lg z-20">
+            L{level}
+          </div>
+        )}
+        {isPreview && (
+          <div className="absolute inset-0 border-2 border-dashed border-white/60 pointer-events-none" />
+        )}
+      </div>
+    );
+  }
   const getBuildingStyle = () => {
     const baseStyle: React.CSSProperties = {
       width: size?.width ? `${size.width}px` : '100%',
@@ -54,22 +173,9 @@ const BuildingVisual: React.FC<BuildingVisualProps> = ({
     return baseStyle;
   };
 
-  const getBuildingIcon = () => {
-    // Use SVG icons or Unicode symbols for better visuals
-    const iconMap: Record<string, string> = {
-      'rune_bakery': '🍞',
-      'potion_workshop': '🧪',
-      'enchanting_lab': '✨',
-      'kitchen': '👨‍🍳',
-      'town_hall': '🏛️',
-      'school': '🏫',
-      'hospital': '🏥',
-      'cinema': '🎬',
-      'fountain': '⛲',
-      'statue': '🗿',
-      'tree': '🌳'
-    };
-    return iconMap[buildingType.building_type] || '🏠';
+  const getBuildingIconEmoji = () => {
+    // Use icon config if available, otherwise fallback
+    return iconConfig?.icon || '🏠';
   };
 
   const getBuildingDetails = () => {
@@ -196,7 +302,7 @@ const BuildingVisual: React.FC<BuildingVisualProps> = ({
         className="text-lg md:text-xl lg:text-2xl z-10 relative transition-transform group-hover:scale-110"
         style={{ textShadow: '0 2px 4px rgba(0,0,0,0.6), 0 0 8px rgba(255,255,255,0.2)' }}
       >
-        {getBuildingIcon()}
+        {getBuildingIconEmoji()}
       </span>
       {level > 1 && !isPreview && (
         <div className="absolute top-0 right-0 bg-gradient-to-br from-yellow-400 to-yellow-600 text-yellow-900 text-xs font-bold px-1.5 py-0.5 rounded-bl-lg border-b-2 border-l-2 border-yellow-700 shadow-lg z-20">

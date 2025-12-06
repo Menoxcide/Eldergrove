@@ -63,7 +63,7 @@ const InventoryBar = () => {
         }
       }
       setShowUpgradeModal(false)
-    } catch (error) {
+    } catch {
       // Error handled in store
     }
   }

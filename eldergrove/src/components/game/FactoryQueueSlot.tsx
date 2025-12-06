@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import type { FactoryQueueItem } from '@/stores/useFactoryStore';
 import { useOfflineQueue } from '@/hooks/useOfflineQueue';
 import { useSpeedUpsStore } from '@/stores/useSpeedUpsStore';
@@ -15,7 +15,7 @@ interface FactoryQueueSlotProps {
   queueItem: FactoryQueueItem;
 }
 
-const FactoryQueueSlot: React.FC<FactoryQueueSlotProps> = ({ queueItem }) => {
+const FactoryQueueSlot: React.FC<FactoryQueueSlotProps> = React.memo(({ queueItem }) => {
   const { finishes_at, slot, recipe_id, factory_type } = queueItem;
   const [timeLeft, setTimeLeft] = useState(0);
   const [recipeName, setRecipeName] = useState<string>('Item');
@@ -74,39 +74,23 @@ const FactoryQueueSlot: React.FC<FactoryQueueSlotProps> = ({ queueItem }) => {
   };
 
   const handleCollect = async () => {
-    try {
-      await queueAction('collect_factory', { p_slot: slot });
-    } catch (error) {
-      // Error is already handled by the queue function
-    }
+    await queueAction('collect_factory', { p_slot: slot });
   };
 
   const handleSpeedUp = async (minutes: number) => {
-    try {
-      await applyFactorySpeedUp(factory_type, slot, minutes);
-      setShowSpeedUpModal(false);
-    } catch (error) {
-      // Error handled in store
-    }
+    await applyFactorySpeedUp(factory_type, slot, minutes);
+    setShowSpeedUpModal(false);
   };
 
   const handleBuyAndUseSpeedUp = async (itemId: string, minutes: number) => {
-    try {
-      await purchaseItem(itemId, true); // Use aether
-      await applyFactorySpeedUp(factory_type, slot, minutes);
-      setShowSpeedUpModal(false);
-    } catch (error) {
-      // Error handled in store
-    }
+    await purchaseItem(itemId, true);
+    await applyFactorySpeedUp(factory_type, slot, minutes);
+    setShowSpeedUpModal(false);
   };
 
   const handleWatchAd = async () => {
-    try {
-      await watchAdForSpeedUp('factory', slot);
-      await fetchQueue(); // Refresh queue to show updated timer
-    } catch (error) {
-      // Error handled in hook
-    }
+    await watchAdForSpeedUp('factory', slot);
+    await fetchQueue();
   };
 
   const isReady = timeLeft <= 0 && finishes_at;
@@ -243,6 +227,8 @@ const FactoryQueueSlot: React.FC<FactoryQueueSlotProps> = ({ queueItem }) => {
       )}
     </>
   );
-};
+});
+
+FactoryQueueSlot.displayName = 'FactoryQueueSlot';
 
 export default FactoryQueueSlot;

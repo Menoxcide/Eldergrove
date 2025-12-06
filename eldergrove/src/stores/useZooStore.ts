@@ -58,6 +58,9 @@ export interface ZooState {
   collectProduction: (enclosureId: number, slot: number) => Promise<void>
   startBreeding: (enclosureId: number) => Promise<void>
   collectBredAnimal: (enclosureId: number) => Promise<void>
+  deleteEnclosure: (enclosureId: number) => Promise<void>
+  cancelBreeding: (enclosureId: number) => Promise<void>
+  cancelProduction: (enclosureId: number, slot: number) => Promise<void>
   subscribeToZoo: () => () => void
 }
 
@@ -77,7 +80,7 @@ export const useZooStore = create<ZooState>((set, get) => ({
       const { data, error } = await supabase.rpc('get_next_enclosure_cost')
       if (error) throw error
       set({ enclosureCostInfo: data as EnclosureCostInfo })
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error fetching enclosure cost info:', err)
     }
   },
@@ -100,8 +103,8 @@ export const useZooStore = create<ZooState>((set, get) => ({
       setEnclosures(data || [])
       // Also fetch cost info
       await getEnclosureCostInfo()
-    } catch (err: any) {
-      const errorMessage = err?.message || 'Failed to fetch enclosures'
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to fetch enclosures'
       setError(errorMessage)
       handleError(err, errorMessage)
     } finally {
@@ -121,8 +124,8 @@ export const useZooStore = create<ZooState>((set, get) => ({
         .order('base_cost_crystals', { ascending: true })
       if (error) throw error
       setAnimalTypes(data || [])
-    } catch (err: any) {
-      const errorMessage = err?.message || 'Failed to fetch animal types'
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to fetch animal types'
       setError(errorMessage)
       handleError(err, errorMessage)
     } finally {
@@ -157,8 +160,8 @@ export const useZooStore = create<ZooState>((set, get) => ({
       
       await fetchEnclosures()
       await getEnclosureCostInfo()
-    } catch (err: any) {
-      const errorMessage = err?.message || 'An unexpected error occurred while creating the enclosure'
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'An unexpected error occurred while creating the enclosure'
       setError(errorMessage)
       handleError(err, errorMessage)
       throw err
@@ -186,8 +189,8 @@ export const useZooStore = create<ZooState>((set, get) => ({
       const { useGameMessageStore } = await import('@/stores/useGameMessageStore')
       useGameMessageStore.getState().addMessage('success', 'Animal added to enclosure!')
       await fetchEnclosures()
-    } catch (err: any) {
-      const errorMessage = err?.message || 'An unexpected error occurred while adding the animal'
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'An unexpected error occurred while adding the animal'
       setError(errorMessage)
       handleError(err, errorMessage)
       throw err
@@ -205,11 +208,10 @@ export const useZooStore = create<ZooState>((set, get) => ({
       const { useGameMessageStore } = await import('@/stores/useGameMessageStore')
       useGameMessageStore.getState().addMessage('success', 'Animal removed from enclosure and returned to inventory!')
       await fetchEnclosures()
-      // Refresh inventory to show the returned animal
       const { useInventoryStore } = await import('./useInventoryStore')
       await useInventoryStore.getState().fetchInventory()
-    } catch (err: any) {
-      const errorMessage = err?.message || 'An unexpected error occurred while removing the animal'
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'An unexpected error occurred while removing the animal'
       setError(errorMessage)
       handleError(err, errorMessage)
       throw err
@@ -229,7 +231,6 @@ export const useZooStore = create<ZooState>((set, get) => ({
       
       if (result && result.success) {
         await fetchEnclosures()
-        // Refresh inventory to show collected items
         const { useInventoryStore } = await import('./useInventoryStore')
         await useInventoryStore.getState().fetchInventory()
         
@@ -245,8 +246,8 @@ export const useZooStore = create<ZooState>((set, get) => ({
       } else {
         throw new Error('Failed to collect production - operation did not complete successfully')
       }
-    } catch (err: any) {
-      const errorMessage = err?.message || 'An unexpected error occurred while collecting production'
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'An unexpected error occurred while collecting production'
       setError(errorMessage)
       handleError(err, errorMessage)
       throw err
@@ -263,8 +264,8 @@ export const useZooStore = create<ZooState>((set, get) => ({
       const { useGameMessageStore } = await import('@/stores/useGameMessageStore')
       useGameMessageStore.getState().addMessage('success', 'Breeding started!')
       await fetchEnclosures()
-    } catch (err: any) {
-      const errorMessage = err?.message || 'An unexpected error occurred while starting breeding'
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'An unexpected error occurred while starting breeding'
       setError(errorMessage)
       handleError(err, errorMessage)
       throw err
@@ -283,7 +284,6 @@ export const useZooStore = create<ZooState>((set, get) => ({
       
       if (result && result.success) {
         await fetchEnclosures()
-        // Refresh inventory to show bred animal
         const { useInventoryStore } = await import('./useInventoryStore')
         await useInventoryStore.getState().fetchInventory()
         
@@ -316,8 +316,64 @@ export const useZooStore = create<ZooState>((set, get) => ({
       } else {
         throw new Error('Failed to collect bred animal - operation did not complete successfully')
       }
-    } catch (err: any) {
-      const errorMessage = err?.message || 'An unexpected error occurred while collecting the bred animal'
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'An unexpected error occurred while collecting the bred animal'
+      setError(errorMessage)
+      handleError(err, errorMessage)
+      throw err
+    }
+  },
+  deleteEnclosure: async (enclosureId: number) => {
+    const { fetchEnclosures, setError, getEnclosureCostInfo } = get()
+    try {
+      const supabase = createClient()
+      const { data, error } = await supabase.rpc('delete_enclosure', {
+        p_enclosure_id: enclosureId
+      })
+      if (error) throw error
+      const { useGameMessageStore } = await import('@/stores/useGameMessageStore')
+      useGameMessageStore.getState().addMessage('success', 'Enclosure deleted!')
+      await fetchEnclosures()
+      await getEnclosureCostInfo()
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'An unexpected error occurred while deleting the enclosure'
+      setError(errorMessage)
+      handleError(err, errorMessage)
+      throw err
+    }
+  },
+  cancelBreeding: async (enclosureId: number) => {
+    const { fetchEnclosures, setError } = get()
+    try {
+      const supabase = createClient()
+      const { error } = await supabase.rpc('cancel_breeding', {
+        p_enclosure_id: enclosureId
+      })
+      if (error) throw error
+      const { useGameMessageStore } = await import('@/stores/useGameMessageStore')
+      useGameMessageStore.getState().addMessage('success', 'Breeding canceled!')
+      await fetchEnclosures()
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'An unexpected error occurred while canceling breeding'
+      setError(errorMessage)
+      handleError(err, errorMessage)
+      throw err
+    }
+  },
+  cancelProduction: async (enclosureId: number, slot: number) => {
+    const { fetchEnclosures, setError } = get()
+    try {
+      const supabase = createClient()
+      const { error } = await supabase.rpc('cancel_production', {
+        p_enclosure_id: enclosureId,
+        p_slot: slot
+      })
+      if (error) throw error
+      const { useGameMessageStore } = await import('@/stores/useGameMessageStore')
+      useGameMessageStore.getState().addMessage('success', 'Production canceled!')
+      await fetchEnclosures()
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'An unexpected error occurred while canceling production'
       setError(errorMessage)
       handleError(err, errorMessage)
       throw err
@@ -337,9 +393,7 @@ export const useZooStore = create<ZooState>((set, get) => ({
         }
       )
       .subscribe((status) => {
-        if (status === 'SUBSCRIBED') {
-          console.log('Subscribed to zoo updates')
-        } else if (status === 'CHANNEL_ERROR') {
+        if (status === 'CHANNEL_ERROR') {
           const { setError } = get()
           setError('Failed to subscribe to real-time updates')
           console.error('Subscription error for zoo')

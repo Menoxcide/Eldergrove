@@ -6,7 +6,7 @@ CREATE OR REPLACE FUNCTION public.fulfill_skyport_order(p_order_id integer)
 RETURNS jsonb
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public
+SET search_path = ''
 AS $$
 DECLARE
   v_player_id uuid := auth.uid();
@@ -128,7 +128,7 @@ CREATE OR REPLACE FUNCTION public.claim_achievement(p_achievement_id integer)
 RETURNS jsonb
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public
+SET search_path = ''
 AS $$
 DECLARE
   v_player_id uuid := auth.uid();
@@ -200,7 +200,7 @@ CREATE OR REPLACE FUNCTION public.claim_quest_reward(p_quest_id integer)
 RETURNS jsonb
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public
+SET search_path = ''
 AS $$
 DECLARE
   v_player_id uuid := auth.uid();
@@ -292,7 +292,7 @@ CREATE OR REPLACE FUNCTION public.claim_regatta_rewards(p_regatta_id integer)
 RETURNS jsonb
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public
+SET search_path = ''
 AS $$
 DECLARE
   v_player_id uuid := auth.uid();

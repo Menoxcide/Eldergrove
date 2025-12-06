@@ -4,8 +4,6 @@ const nextConfig: NextConfig = {
   /* config options here */
   // reactCompiler: true, // Temporarily disabled to test stability
   
-  // Static export for Capacitor mobile builds
-  // This ensures Next.js builds to 'out' directory, matching capacitor.config.ts webDir setting
   output: 'export',
   
   // Configure Turbopack to stub Capacitor packages (native-only dependencies)
@@ -20,8 +18,6 @@ const nextConfig: NextConfig = {
     },
   },
   
-  // Note: headers() function is not compatible with static export (output: 'export')
-  // Headers for static sites should be configured at the hosting/CDN level
 };
 
 export default nextConfig;

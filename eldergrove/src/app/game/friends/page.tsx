@@ -41,7 +41,7 @@ export default function FriendsPage() {
       
       if (error) throw error;
       setSearchResults(data || []);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error searching:', error);
     } finally {
       setSearching(false);
@@ -49,30 +49,18 @@ export default function FriendsPage() {
   };
 
   const handleSendRequest = async (friendId: string) => {
-    try {
-      await sendFriendRequest(friendId);
-      setSearchUsername('');
-      setSearchResults([]);
-    } catch (error) {
-      // Error handled in store
-    }
+    await sendFriendRequest(friendId);
+    setSearchUsername('');
+    setSearchResults([]);
   };
 
   const handleAccept = async (friendId: string) => {
-    try {
-      await acceptFriendRequest(friendId);
-    } catch (error) {
-      // Error handled in store
-    }
+    await acceptFriendRequest(friendId);
   };
 
   const handleRemove = async (friendId: string) => {
     if (confirm('Remove this friend?')) {
-      try {
-        await removeFriend(friendId);
-      } catch (error) {
-        // Error handled in store
-      }
+      await removeFriend(friendId);
     }
   };
 

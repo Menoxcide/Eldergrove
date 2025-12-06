@@ -47,8 +47,9 @@ export const usePremiumShopStore = create<PremiumShopState>((set, get) => ({
         .order('sort_order', { ascending: true })
       if (error) throw error
       setItems(data || [])
-    } catch (err: any) {
-      setError(err.message)
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to fetch premium shop items'
+      setError(errorMessage)
       console.error('Error fetching premium shop items:', err)
     } finally {
       setLoading(false)
@@ -64,9 +65,15 @@ export const usePremiumShopStore = create<PremiumShopState>((set, get) => ({
       })
       if (error) throw error
 
-      const result = data as { success: boolean; item_type: string; [key: string]: any }
+      const result = data as { success: boolean; item_type: string; new_crystal_balance?: number; new_aether_balance?: number; minutes?: number; duration_hours?: number }
       
       if (result.success) {
+        // Update crystals/aether from returned balances if available
+        const { usePlayerStore } = await import('./usePlayerStore')
+        if (result.new_crystal_balance !== null && result.new_crystal_balance !== undefined) {
+          usePlayerStore.getState().setCrystals(result.new_crystal_balance)
+        }
+        
         let message = '✅ Purchase successful!'
         
         // Handle item-specific logic
@@ -80,14 +87,11 @@ export const usePremiumShopStore = create<PremiumShopState>((set, get) => ({
         
         const { useGameMessageStore } = await import('@/stores/useGameMessageStore')
         useGameMessageStore.getState().addMessage('success', message)
-        
-        // Refresh player profile to update aether/crystals
-        const { usePlayerStore } = await import('./usePlayerStore')
-        await usePlayerStore.getState().fetchPlayerProfile()
       }
-    } catch (err: any) {
-      setError(err.message)
-      handleError(err, err.message)
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to purchase item'
+      setError(errorMessage)
+      handleError(err, errorMessage)
       throw err
     }
   },

@@ -16,9 +16,21 @@ const mockCreateClient = createClient as jest.MockedFunction<typeof createClient
 const mockUsePlayerStore = usePlayerStore as jest.MockedFunction<typeof usePlayerStore>
 const mockCrystalTransactionManager = crystalTransactionManager as jest.Mocked<typeof crystalTransactionManager>
 
+interface MockSupabaseClient {
+  rpc: jest.MockedFunction<any>
+}
+
+interface MockPlayerStore {
+  getState: jest.MockedFunction<() => {
+    crystals: number
+    setCrystals: jest.MockedFunction<(crystals: number) => void>
+    fetchPlayerProfile: jest.MockedFunction<() => Promise<void>>
+  }>
+}
+
 describe('Crystal Economy - Race Condition Analysis', () => {
-  let mockSupabaseClient: any
-  let mockPlayerStore: any
+  let mockSupabaseClient: MockSupabaseClient
+  let mockPlayerStore: MockPlayerStore
 
   beforeEach(() => {
     jest.clearAllMocks()
@@ -30,10 +42,11 @@ describe('Crystal Economy - Race Condition Analysis', () => {
     mockSupabaseClient = {
       rpc: jest.fn(),
     }
-    mockCreateClient.mockReturnValue(mockSupabaseClient)
+    mockCreateClient.mockReturnValue(mockSupabaseClient as any)
 
-    // Mock the crystal transaction manager
-    mockCrystalTransactionManager.executeCrystalOperation = jest.fn(async (operation: () => Promise<void>, description: string) => { await operation(); }) as any
+    mockCrystalTransactionManager.executeCrystalOperation = jest.fn(
+      async (operation: () => Promise<void>, description: string) => { await operation(); }
+    ) as jest.MockedFunction<typeof crystalTransactionManager.executeCrystalOperation>
 
     // Setup mock player store
     mockPlayerStore = {

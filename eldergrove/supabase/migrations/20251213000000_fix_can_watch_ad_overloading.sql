@@ -1,15 +1,4 @@
--- Fix can_watch_ad function overloading issue
--- Drop the old can_watch_ad() function (no parameters) to resolve PostgREST ambiguity
--- Update watch_ad_speed_up to use can_watch_ad(NULL) instead of can_watch_ad()
--- Ensure watch_ad_restore_energy function exists properly
-
--- Drop the old can_watch_ad() function (no parameters)
--- This resolves the PGRST203 error where PostgREST cannot choose between
--- can_watch_ad() and can_watch_ad(p_production_type => text)
 DROP FUNCTION IF EXISTS public.can_watch_ad();
-
--- Update watch_ad_speed_up to call can_watch_ad(NULL) instead of can_watch_ad()
--- This ensures it uses the parameterized version with NULL for production speed-ups
 CREATE OR REPLACE FUNCTION public.watch_ad_speed_up(
   p_production_type TEXT,
   p_production_id INTEGER,
@@ -190,8 +179,6 @@ $$;
 
 COMMENT ON FUNCTION public.watch_ad_speed_up(TEXT, INTEGER, INTEGER) IS 'Watch ad and apply speed-up to production. Validates eligibility, updates production timer, and records ad watch.';
 
--- Ensure watch_ad_restore_energy function exists with proper signature
--- This fixes the 404 error if the function was missing
 CREATE OR REPLACE FUNCTION public.watch_ad_restore_energy()
 RETURNS JSONB
 LANGUAGE plpgsql

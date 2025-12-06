@@ -26,7 +26,6 @@ const OrderCard: React.FC<OrderCardProps> = ({ order, onFulfill, inventory }) =>
       const expiresDate = new Date(order.expires_at);
       const expiresTime = expiresDate.getTime();
       
-      // Check if date is valid
       if (isNaN(expiresTime)) {
         console.error('Invalid expires_at date:', order.expires_at);
         setTimeLeft(0);
@@ -43,7 +42,6 @@ const OrderCard: React.FC<OrderCardProps> = ({ order, onFulfill, inventory }) =>
   }, [order.expires_at]);
 
   useEffect(() => {
-    // Check if player has all required items
     let hasAllItems = true;
     for (const [itemIdStr, requiredQty] of Object.entries(order.requirements)) {
       const itemId = parseInt(itemIdStr);
@@ -200,7 +198,6 @@ export default function SkyportPage() {
   }, [fetchOrders, fetchInventory, subscribeToOrders]);
 
   const handleFulfill = async (orderId: number) => {
-    // Pre-validation: Check if player has all required items
     const order = orders.find(o => o.id === orderId);
     if (order) {
       const missingItems: Array<{ itemId: number; required: number; available: number }> = [];
@@ -232,7 +229,7 @@ export default function SkyportPage() {
     try {
       await fulfillOrder(orderId);
       await fetchInventory();
-    } catch (error) {
+    } catch {
       // Error already handled in store
     }
   };
@@ -240,7 +237,7 @@ export default function SkyportPage() {
   const handleGenerateOrders = async () => {
     try {
       await generateOrders();
-    } catch (error) {
+    } catch {
       // Error already handled in store
     }
   };

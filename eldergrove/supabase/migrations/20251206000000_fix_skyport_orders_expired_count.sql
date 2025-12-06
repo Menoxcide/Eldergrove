@@ -5,7 +5,7 @@ CREATE OR REPLACE FUNCTION public.generate_skyport_orders(p_player_id uuid)
 RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public
+SET search_path = ''
 AS $$
 DECLARE
   v_order_count integer;

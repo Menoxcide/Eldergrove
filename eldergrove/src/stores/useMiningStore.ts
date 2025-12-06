@@ -104,8 +104,8 @@ export const useMiningStore = create<MiningState>((set, get) => ({
       } else {
         setMineDig(null)
       }
-    } catch (err: any) {
-      const errorMessage = err?.message || 'Failed to fetch mine dig data'
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to fetch mine dig data'
       setError(errorMessage)
       handleError(err, errorMessage)
     } finally {
@@ -129,8 +129,8 @@ export const useMiningStore = create<MiningState>((set, get) => ({
         .order('created_at', { ascending: true })
       if (error) throw error
       setTools(data || [])
-    } catch (err: any) {
-      const errorMessage = err?.message || 'Failed to fetch mining tools'
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to fetch mining tools'
       setError(errorMessage)
       handleError(err, errorMessage)
     } finally {
@@ -150,8 +150,8 @@ export const useMiningStore = create<MiningState>((set, get) => ({
         .order('base_value_crystals', { ascending: true })
       if (error) throw error
       setOreTypes(data || [])
-    } catch (err: any) {
-      const errorMessage = err?.message || 'Failed to fetch ore types'
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to fetch ore types'
       setError(errorMessage)
       handleError(err, errorMessage)
     } finally {
@@ -189,17 +189,15 @@ export const useMiningStore = create<MiningState>((set, get) => ({
         }
         await fetchMineDig()
         await fetchTools()
-        // Refresh inventory to show collected ores
         const { useInventoryStore } = await import('./useInventoryStore')
         await useInventoryStore.getState().fetchInventory()
-        // Refresh player profile to update XP and level (XP is granted by mine_ore)
         const { usePlayerStore } = await import('./usePlayerStore')
         await usePlayerStore.getState().fetchPlayerProfile()
       } else {
         throw new Error('Mining operation did not complete successfully')
       }
-    } catch (err: any) {
-      const errorMessage = err.message || 'An unexpected error occurred while mining'
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'An unexpected error occurred while mining'
       setError(errorMessage)
       handleError(err, errorMessage)
       throw err
@@ -209,18 +207,25 @@ export const useMiningStore = create<MiningState>((set, get) => ({
     const { fetchTools, setError } = get()
     try {
       const supabase = createClient()
-      const { error } = await supabase.rpc('repair_tool', {
+      const { data, error } = await supabase.rpc('repair_tool', {
         p_tool_type: toolType
       })
       if (error) throw error
-      const { useGameMessageStore } = await import('@/stores/useGameMessageStore')
-      useGameMessageStore.getState().addMessage('success', 'Tool repaired!')
-      await fetchTools()
-      // Refresh player profile to update crystals (deducted by repair_tool RPC)
-      const { usePlayerStore } = await import('./usePlayerStore')
-      await usePlayerStore.getState().fetchPlayerProfile()
-    } catch (err: any) {
-      const errorMessage = err.message || 'An unexpected error occurred while repairing the tool'
+      
+      const result = data as { success: boolean; repair_cost: number; new_crystal_balance?: number }
+      
+      if (result.success) {
+        // Update crystals from returned balance if available
+        if (result.new_crystal_balance !== null && result.new_crystal_balance !== undefined) {
+          const { usePlayerStore } = await import('./usePlayerStore')
+          usePlayerStore.getState().setCrystals(result.new_crystal_balance)
+        }
+        const { useGameMessageStore } = await import('@/stores/useGameMessageStore')
+        useGameMessageStore.getState().addMessage('success', 'Tool repaired!')
+        await fetchTools()
+      }
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'An unexpected error occurred while repairing the tool'
       setError(errorMessage)
       handleError(err, errorMessage)
       throw err
@@ -230,18 +235,25 @@ export const useMiningStore = create<MiningState>((set, get) => ({
     const { fetchTools, setError } = get()
     try {
       const supabase = createClient()
-      const { error } = await supabase.rpc('upgrade_mining_tool', {
+      const { data, error } = await supabase.rpc('upgrade_mining_tool', {
         p_tool_type: toolType
       })
       if (error) throw error
-      const { useGameMessageStore } = await import('@/stores/useGameMessageStore')
-      useGameMessageStore.getState().addMessage('success', 'Tool upgraded!')
-      await fetchTools()
-      // Refresh player profile to update crystals (deducted by upgrade_mining_tool RPC)
-      const { usePlayerStore } = await import('./usePlayerStore')
-      await usePlayerStore.getState().fetchPlayerProfile()
-    } catch (err: any) {
-      const errorMessage = err.message || 'An unexpected error occurred while upgrading the tool'
+      
+      const result = data as { success: boolean; upgrade_cost: number; new_tool_type: string; new_crystal_balance?: number }
+      
+      if (result.success) {
+        // Update crystals from returned balance if available
+        if (result.new_crystal_balance !== null && result.new_crystal_balance !== undefined) {
+          const { usePlayerStore } = await import('./usePlayerStore')
+          usePlayerStore.getState().setCrystals(result.new_crystal_balance)
+        }
+        const { useGameMessageStore } = await import('@/stores/useGameMessageStore')
+        useGameMessageStore.getState().addMessage('success', 'Tool upgraded!')
+        await fetchTools()
+      }
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'An unexpected error occurred while upgrading the tool'
       setError(errorMessage)
       handleError(err, errorMessage)
       throw err
@@ -269,15 +281,14 @@ export const useMiningStore = create<MiningState>((set, get) => ({
           `Energy fully restored! (${result.energy_restored} energy restored)`
         )
         await fetchMineDig()
-        // Use the returned crystal balance directly to avoid race conditions
         const { usePlayerStore } = await import('./usePlayerStore')
         usePlayerStore.getState().setCrystals(result.new_crystals)
       } else {
         const message = result?.message || 'Energy restoration failed'
         throw new Error(message)
       }
-    } catch (err: any) {
-      const errorMessage = err.message || 'An unexpected error occurred while restoring energy'
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'An unexpected error occurred while restoring energy'
       setError(errorMessage)
       handleError(err, errorMessage)
       throw err
@@ -306,9 +317,7 @@ export const useMiningStore = create<MiningState>((set, get) => ({
         }
       )
       .subscribe((status) => {
-        if (status === 'SUBSCRIBED') {
-          console.log('Subscribed to mining updates')
-        } else if (status === 'CHANNEL_ERROR') {
+        if (status === 'CHANNEL_ERROR') {
           const { setError } = get()
           setError('Failed to subscribe to real-time updates')
           console.error('Subscription error for mining')

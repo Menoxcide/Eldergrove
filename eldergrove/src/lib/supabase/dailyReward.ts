@@ -6,6 +6,7 @@ export interface DailyRewardResponse {
   success: boolean;
   message: string;
   crystalsAwarded?: number;
+  seedsAwarded?: Array<{ item_id: number; quantity: number; name: string }>;
   alreadyClaimed?: boolean;
   new_crystal_balance?: number;
 }
@@ -21,7 +22,6 @@ export async function claimDailyReward(): Promise<DailyRewardResponse> {
     const { usePlayerStore } = await import('@/stores/usePlayerStore');
     const supabase = createClient();
 
-    // Call the edge function instead of direct database operations
     const { data, error } = await supabase.functions.invoke('claim-daily-reward');
 
     if (error) {
@@ -31,7 +31,6 @@ export async function claimDailyReward(): Promise<DailyRewardResponse> {
     response = data as DailyRewardResponse;
 
     if (response.success && !response.alreadyClaimed) {
-      // Use the returned crystal balance directly to avoid race conditions
       if (response.new_crystal_balance !== null && response.new_crystal_balance !== undefined) {
         // Validate that the new balance is not negative
         if (response.new_crystal_balance < 0) {

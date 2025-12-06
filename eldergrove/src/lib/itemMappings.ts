@@ -14,6 +14,18 @@ export const ITEM_NAME_TO_ID: Record<string, number> = {
   herbs: 12,
   magic_mushroom: 13,
   enchanted_flower: 14,
+  // Factory-produced items
+  vegetable_stew: 15,
+  corn_bread: 16,
+  pumpkin_pie: 17,
+  herbal_tea: 18,
+  magic_potion: 19,
+  fruit_salad: 20,
+  // Seeds for crops 11-14
+  berry_seed: 111,
+  herbs_seed: 112,
+  magic_mushroom_seed: 113,
+  enchanted_flower_seed: 114,
 };
 
 /**

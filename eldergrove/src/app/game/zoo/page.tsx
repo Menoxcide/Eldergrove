@@ -1,12 +1,14 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useZooStore, type ZooEnclosure, type AnimalType } from '@/stores/useZooStore';
 import { usePlayerStore } from '@/stores/usePlayerStore';
 import { useAdSpeedUp } from '@/hooks/useAdSpeedUp';
 import { Skeleton } from '@/components/ui/LoadingSkeleton';
 import { getItemIcon, getItemName } from '@/lib/itemUtils';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
+import Tooltip, { type TooltipSection } from '@/components/ui/Tooltip';
+import ProgressBar from '@/components/ui/ProgressBar';
 
 interface EnclosureCardProps {
   enclosure: ZooEnclosure;
@@ -16,37 +18,106 @@ interface EnclosureCardProps {
   onCollectProduction: (enclosureId: number, slot: number) => void;
   onStartBreeding: (enclosureId: number) => void;
   onCollectBred: (enclosureId: number) => void;
+  onDeleteEnclosure: (enclosureId: number) => void;
+  onCancelBreeding: (enclosureId: number) => void;
+  onCancelProduction: (enclosureId: number, slot: number) => void;
 }
 
-const EnclosureCard: React.FC<EnclosureCardProps> = ({
+const EnclosureCard: React.FC<EnclosureCardProps> = React.memo(({
   enclosure,
   animalTypes,
   onAddAnimal,
   onRemoveAnimal,
   onCollectProduction,
   onStartBreeding,
-  onCollectBred
+  onCollectBred,
+  onDeleteEnclosure,
+  onCancelBreeding,
+  onCancelProduction
 }) => {
   const [showAnimalModal, setShowAnimalModal] = useState<number | null>(null);
+  const [currentTime, setCurrentTime] = useState(Date.now());
   const { watchAdForSpeedUp, canWatchAd, adsRemaining, loading: adLoading } = useAdSpeedUp();
   const animal1 = enclosure.animal1_id ? animalTypes.find(a => a.id === enclosure.animal1_id) : null;
   const animal2 = enclosure.animal2_id ? animalTypes.find(a => a.id === enclosure.animal2_id) : null;
+  
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentTime(Date.now());
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   const canCollect1 = animal1 && enclosure.animal1_produced_at && 
-    new Date(enclosure.animal1_produced_at).getTime() + (animal1.produces_interval_minutes * 60 * 1000) <= Date.now();
+    new Date(enclosure.animal1_produced_at).getTime() + (animal1.produces_interval_minutes * 60 * 1000) <= currentTime;
   const canCollect2 = animal2 && enclosure.animal2_produced_at && 
-    new Date(enclosure.animal2_produced_at).getTime() + (animal2.produces_interval_minutes * 60 * 1000) <= Date.now();
+    new Date(enclosure.animal2_produced_at).getTime() + (animal2.produces_interval_minutes * 60 * 1000) <= currentTime;
   
-  // Can only breed if both animals are the same type and not at max level
+  const getProductionProgress = (producedAt: string | null, intervalMinutes: number): number => {
+    if (!producedAt) return 0;
+    const startTime = new Date(producedAt).getTime();
+    const intervalMs = intervalMinutes * 60 * 1000;
+    const elapsed = currentTime - startTime;
+    const progress = Math.min(100, (elapsed / intervalMs) * 100);
+    return Math.max(0, progress);
+  };
+  
+  const getBreedingProgress = (): number => {
+    if (!enclosure.breeding_started_at || !enclosure.breeding_completes_at) return 0;
+    const startTime = new Date(enclosure.breeding_started_at).getTime();
+    const endTime = new Date(enclosure.breeding_completes_at).getTime();
+    const totalDuration = endTime - startTime;
+    const elapsed = currentTime - startTime;
+    const progress = Math.min(100, (elapsed / totalDuration) * 100);
+    return Math.max(0, progress);
+  };
+  
+  const productionProgress1 = animal1 && enclosure.animal1_produced_at && !canCollect1
+    ? getProductionProgress(enclosure.animal1_produced_at, animal1.produces_interval_minutes)
+    : 0;
+  const productionProgress2 = animal2 && enclosure.animal2_produced_at && !canCollect2
+    ? getProductionProgress(enclosure.animal2_produced_at, animal2.produces_interval_minutes)
+    : 0;
+
+  const isEmpty = enclosure.animal1_id === null && enclosure.animal2_id === null;
+
   const animalsMatch = animal1 && animal2 && animal1.id === animal2.id;
   const animal1AtMax = enclosure.animal1_level !== null && enclosure.animal1_level >= 10;
   const animal2AtMax = enclosure.animal2_level !== null && enclosure.animal2_level >= 10;
   const canBreed = animalsMatch && !animal1AtMax && !animal2AtMax && !enclosure.breeding_started_at;
-  const breedingComplete = enclosure.breeding_completes_at && 
-    new Date(enclosure.breeding_completes_at).getTime() <= Date.now();
+  const breedingComplete = enclosure.breeding_completes_at &&
+    new Date(enclosure.breeding_completes_at).getTime() <= currentTime;
+
+  const breedingProgress = enclosure.breeding_started_at && !breedingComplete
+    ? getBreedingProgress()
+    : 0;
   
   const animal1Level = enclosure.animal1_level ?? 0;
   const animal2Level = enclosure.animal2_level ?? 0;
+
+  const getAnimalTooltipContent = (animal: AnimalType, level: number, slot: 1 | 2): TooltipSection[] => {
+    const sections: TooltipSection[] = [];
+
+    sections.push({
+      title: `${animal.name}${level > 0 ? ` +${level}` : ''}`,
+      content: `Rarity: ${animal.rarity}`,
+      color: animal.rarity === 'legendary' ? 'purple' : animal.rarity === 'rare' ? 'blue' : 'gray',
+      icon: animal.icon
+    });
+
+    if (animal.produces_item_id) {
+      const isProducing = slot === 1 ? !canCollect1 : !canCollect2;
+      const statusText = isProducing ? 'Currently producing...' : 'Ready to collect!';
+      sections.push({
+        title: 'Production',
+        content: `${getItemIcon(animal.produces_item_id)} ${getItemName(animal.produces_item_id)} x${animal.produces_quantity} every ${animal.produces_interval_minutes} minutes\n${statusText}`,
+        color: isProducing ? 'yellow' : 'green',
+        icon: '⚡'
+      });
+    }
+
+    return sections;
+  };
 
   const formatTimeLeft = (completesAt: string): string => {
     const now = Date.now();
@@ -59,31 +130,31 @@ const EnclosureCard: React.FC<EnclosureCardProps> = ({
 
   const handleSelectAnimal = async (animalTypeId: number) => {
     if (showAnimalModal === null) return;
-    try {
-      await onAddAnimal(enclosure.id, animalTypeId, showAnimalModal);
-      setShowAnimalModal(null);
-    } catch (error) {
-      // Error handled in store
-    }
+    await onAddAnimal(enclosure.id, animalTypeId, showAnimalModal);
+    setShowAnimalModal(null);
   };
 
   const handleWatchAd = async (slot: number) => {
-    try {
-      // Encode enclosure_id and slot: enclosure_id * 10 + slot
-      const productionId = enclosure.id * 10 + slot;
-      await watchAdForSpeedUp('zoo', productionId);
-      // Refresh will happen via realtime subscription
-    } catch (error) {
-      // Error handled in hook
-    }
+    const productionId = enclosure.id * 10 + slot;
+    await watchAdForSpeedUp('zoo', productionId);
   };
 
   return (
     <div className="bg-gradient-to-br from-green-900 to-emerald-900 rounded-2xl p-6 border-2 border-green-500/30 shadow-lg">
-      <h3 className="text-xl font-bold text-white mb-4">{enclosure.enclosure_name}</h3>
+      <div className="flex justify-between items-center mb-4">
+        <h3 className="text-xl font-bold text-white">{enclosure.enclosure_name}</h3>
+        {isEmpty && (
+          <button
+            onClick={() => onDeleteEnclosure(enclosure.id)}
+            className="w-6 h-6 flex items-center justify-center bg-red-600 hover:bg-red-500 text-white rounded-full text-xs font-bold transition-colors"
+            title="Delete enclosure"
+          >
+            ×
+          </button>
+        )}
+      </div>
       
       <div className="grid grid-cols-2 gap-4 mb-4">
-        {/* Slot 1 */}
         <div className="bg-white/10 rounded-lg p-4 relative">
           {animal1 ? (
             <>
@@ -94,14 +165,16 @@ const EnclosureCard: React.FC<EnclosureCardProps> = ({
               >
                 ×
               </button>
-              <div className="text-center mb-2">
-                <span className="text-4xl">{animal1.icon}</span>
-                <div className="text-white font-semibold text-sm">{animal1.name}</div>
-                {animal1Level > 0 && (
-                  <div className="text-yellow-400 text-xs font-bold">+{animal1Level}</div>
-                )}
-                <div className="text-slate-300 text-xs capitalize">{animal1.rarity}</div>
-              </div>
+              <Tooltip content={getAnimalTooltipContent(animal1, animal1Level, 1)} position="auto">
+                <div className="text-center mb-2">
+                  <span className="text-4xl">{animal1.icon}</span>
+                  <div className="text-white font-semibold text-sm">{animal1.name}</div>
+                  {animal1Level > 0 && (
+                    <div className="text-yellow-400 text-xs font-bold">+{animal1Level}</div>
+                  )}
+                  <div className="text-slate-300 text-xs capitalize">{animal1.rarity}</div>
+                </div>
+              </Tooltip>
               {canCollect1 && (
                 <button
                   onClick={() => onCollectProduction(enclosure.id, 1)}
@@ -110,9 +183,27 @@ const EnclosureCard: React.FC<EnclosureCardProps> = ({
                   Collect {getItemIcon(animal1.produces_item_id || 0)} {animal1.produces_quantity}
                 </button>
               )}
-              {!canCollect1 && animal1 && (
+              {!canCollect1 && animal1 && enclosure.animal1_produced_at && (
                 <div className="space-y-2">
-                  <div className="text-slate-400 text-xs text-center">Producing...</div>
+                  <div className="text-xs text-yellow-300 text-center font-semibold">
+                    Producing...
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1">
+                      <ProgressBar
+                        progress={productionProgress1}
+                        showLabel={true}
+                        label={`${Math.round(productionProgress1)}%`}
+                      />
+                    </div>
+                    <button
+                      onClick={() => onCancelProduction(enclosure.id, 1)}
+                      className="w-6 h-6 flex items-center justify-center bg-red-600 hover:bg-red-500 text-white rounded-full text-xs font-bold transition-colors flex-shrink-0"
+                      title="Cancel production"
+                    >
+                      ×
+                    </button>
+                  </div>
                   {canWatchAd && (
                     <button
                       onClick={() => handleWatchAd(1)}
@@ -136,7 +227,6 @@ const EnclosureCard: React.FC<EnclosureCardProps> = ({
           )}
         </div>
 
-        {/* Slot 2 */}
         <div className="bg-white/10 rounded-lg p-4 relative">
           {animal2 ? (
             <>
@@ -147,14 +237,16 @@ const EnclosureCard: React.FC<EnclosureCardProps> = ({
               >
                 ×
               </button>
-              <div className="text-center mb-2">
-                <span className="text-4xl">{animal2.icon}</span>
-                <div className="text-white font-semibold text-sm">{animal2.name}</div>
-                {animal2Level > 0 && (
-                  <div className="text-yellow-400 text-xs font-bold">+{animal2Level}</div>
-                )}
-                <div className="text-slate-300 text-xs capitalize">{animal2.rarity}</div>
-              </div>
+              <Tooltip content={getAnimalTooltipContent(animal2, animal2Level, 2)} position="auto">
+                <div className="text-center mb-2">
+                  <span className="text-4xl">{animal2.icon}</span>
+                  <div className="text-white font-semibold text-sm">{animal2.name}</div>
+                  {animal2Level > 0 && (
+                    <div className="text-yellow-400 text-xs font-bold">+{animal2Level}</div>
+                  )}
+                  <div className="text-slate-300 text-xs capitalize">{animal2.rarity}</div>
+                </div>
+              </Tooltip>
               {canCollect2 && (
                 <button
                   onClick={() => onCollectProduction(enclosure.id, 2)}
@@ -163,9 +255,27 @@ const EnclosureCard: React.FC<EnclosureCardProps> = ({
                   Collect {getItemIcon(animal2.produces_item_id || 0)} {animal2.produces_quantity}
                 </button>
               )}
-              {!canCollect2 && animal2 && (
+              {!canCollect2 && animal2 && enclosure.animal2_produced_at && (
                 <div className="space-y-2">
-                  <div className="text-slate-400 text-xs text-center">Producing...</div>
+                  <div className="text-xs text-yellow-300 text-center font-semibold">
+                    Producing...
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1">
+                      <ProgressBar
+                        progress={productionProgress2}
+                        showLabel={true}
+                        label={`${Math.round(productionProgress2)}%`}
+                      />
+                    </div>
+                    <button
+                      onClick={() => onCancelProduction(enclosure.id, 2)}
+                      className="w-6 h-6 flex items-center justify-center bg-red-600 hover:bg-red-500 text-white rounded-full text-xs font-bold transition-colors flex-shrink-0"
+                      title="Cancel production"
+                    >
+                      ×
+                    </button>
+                  </div>
                   {canWatchAd && (
                     <button
                       onClick={() => handleWatchAd(2)}
@@ -190,9 +300,8 @@ const EnclosureCard: React.FC<EnclosureCardProps> = ({
         </div>
       </div>
 
-      {/* Breeding */}
       {enclosure.breeding_started_at && (
-        <div className="mb-4 bg-purple-900/50 rounded-lg p-3 text-center">
+        <div className="mb-4 bg-purple-900/50 rounded-lg p-3">
           {breedingComplete ? (
             <button
               onClick={() => onCollectBred(enclosure.id)}
@@ -201,9 +310,27 @@ const EnclosureCard: React.FC<EnclosureCardProps> = ({
               Collect Bred Animal! 🎉
             </button>
           ) : (
-            <div className="text-white">
-              <div className="text-sm mb-1">Breeding in progress...</div>
-              <div className="text-xs text-purple-300">{formatTimeLeft(enclosure.breeding_completes_at!)}</div>
+            <div className="space-y-2">
+              <div className="text-xs text-purple-300 text-center font-semibold">
+                Breeding...
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="flex-1">
+                  <ProgressBar
+                    progress={breedingProgress}
+                    showLabel={true}
+                    label={`${Math.round(breedingProgress)}%`}
+                  />
+                </div>
+                <button
+                  onClick={() => onCancelBreeding(enclosure.id)}
+                  className="w-6 h-6 flex items-center justify-center bg-red-600 hover:bg-red-500 text-white rounded-full text-xs font-bold transition-colors flex-shrink-0"
+                  title="Cancel breeding"
+                >
+                  ×
+                </button>
+              </div>
+              <div className="text-xs text-purple-300 text-center">{formatTimeLeft(enclosure.breeding_completes_at!)}</div>
             </div>
           )}
         </div>
@@ -232,7 +359,6 @@ const EnclosureCard: React.FC<EnclosureCardProps> = ({
         </>
       )}
 
-      {/* Animal Selection Modal */}
       {showAnimalModal !== null && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowAnimalModal(null)}>
           <div className="bg-gradient-to-br from-green-900 to-emerald-900 rounded-2xl p-6 max-w-2xl w-full mx-4 border-2 border-green-500/50 max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
@@ -273,7 +399,9 @@ const EnclosureCard: React.FC<EnclosureCardProps> = ({
       )}
     </div>
   );
-};
+});
+
+EnclosureCard.displayName = 'EnclosureCard';
 
 export default function ZooPage() {
   const {
@@ -290,6 +418,9 @@ export default function ZooPage() {
     collectProduction,
     startBreeding,
     collectBredAnimal,
+    deleteEnclosure,
+    cancelBreeding,
+    cancelProduction,
     subscribeToZoo
   } = useZooStore();
   const { crystals } = usePlayerStore();
@@ -297,9 +428,7 @@ export default function ZooPage() {
   const [newEnclosureName, setNewEnclosureName] = useState('');
   const [showCreateModal, setShowCreateModal] = useState(false);
   
-  // Wrapper for addAnimalToEnclosure with pre-validation
   const handleAddAnimal = async (enclosureId: number, animalTypeId: number, slot: number) => {
-    // Pre-validation: Check if slot is already occupied
     const enclosure = enclosures.find(e => e.id === enclosureId);
     if (enclosure) {
       if (slot === 1 && enclosure.animal1_id !== null) {
@@ -322,7 +451,6 @@ export default function ZooPage() {
       }
     }
     
-    // Pre-validation: Check if player has enough crystals
     const animalType = animalTypes.find(a => a.id === animalTypeId);
     if (animalType && crystals < animalType.base_cost_crystals) {
       const needed = animalType.base_cost_crystals - crystals;
@@ -335,11 +463,7 @@ export default function ZooPage() {
       return;
     }
     
-    try {
-      await addAnimalToEnclosure(enclosureId, animalTypeId, slot);
-    } catch (error) {
-      // Error already handled in store
-    }
+    await addAnimalToEnclosure(enclosureId, animalTypeId, slot);
   };
 
   useEffect(() => {
@@ -350,17 +474,23 @@ export default function ZooPage() {
   }, [fetchEnclosures, fetchAnimalTypes, subscribeToZoo]);
 
   const handleCreateEnclosure = async () => {
-    if (!newEnclosureName.trim()) {
+    const trimmedName = newEnclosureName.trim();
+    if (!trimmedName) {
       showError('Enclosure Name Required', 'Please enter a name for your enclosure.');
       return;
     }
-    try {
-      await createEnclosure(newEnclosureName.trim());
-      setNewEnclosureName('');
-      setShowCreateModal(false);
-    } catch (error) {
-      // Error handled in store
+    if (trimmedName.length > 30) {
+      showError('Enclosure Name Too Long', 'Enclosure name cannot exceed 30 characters.');
+      return;
     }
+    // Allow only alphanumeric characters, spaces, hyphens, and apostrophes
+    if (!/^[a-zA-Z0-9\s\-']+$/.test(trimmedName)) {
+      showError('Invalid Enclosure Name', 'Enclosure name can only contain letters, numbers, spaces, hyphens, and apostrophes.');
+      return;
+    }
+    await createEnclosure(trimmedName);
+    setNewEnclosureName('');
+    setShowCreateModal(false);
   };
 
   if (loading) {
@@ -412,7 +542,6 @@ export default function ZooPage() {
           </div>
         )}
 
-        {/* Enclosures */}
         {enclosures.length === 0 ? (
           <div className="bg-white/10 backdrop-blur-md rounded-2xl p-8 text-center">
             <p className="text-slate-300 text-lg mb-4">No enclosures yet</p>
@@ -442,12 +571,14 @@ export default function ZooPage() {
                 onCollectProduction={collectProduction}
                 onStartBreeding={startBreeding}
                 onCollectBred={collectBredAnimal}
+                onDeleteEnclosure={deleteEnclosure}
+                onCancelBreeding={cancelBreeding}
+                onCancelProduction={cancelProduction}
               />
             ))}
           </div>
         )}
 
-        {/* Animal Types Reference */}
         <div className="mt-8">
           <h2 className="text-2xl font-bold text-white mb-4">Available Animals</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -476,7 +607,6 @@ export default function ZooPage() {
           </div>
         </div>
 
-        {/* Create Enclosure Modal */}
         {showCreateModal && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowCreateModal(false)}>
             <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-2xl p-6 max-w-md w-full mx-4 border-2 border-slate-700" onClick={(e) => e.stopPropagation()}>

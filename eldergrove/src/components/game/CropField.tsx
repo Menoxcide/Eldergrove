@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useFarmStore, type FarmState, type Crop } from '@/stores/useFarmStore';
 import { useInventoryStore } from '@/stores/useInventoryStore';
@@ -25,7 +25,7 @@ interface CropFieldProps {
   plot: FarmPlot;
 }
 
-const CropField: React.FC<CropFieldProps> = ({ plot }) => {
+const CropField: React.FC<CropFieldProps> = React.memo(({ plot }) => {
   const { crop_id, ready_at } = plot;
   const fetchPlots = useFarmStore((state: FarmState) => state.fetchPlots);
   const harvestCrop = useFarmStore((state: FarmState) => state.harvestCrop);
@@ -39,6 +39,8 @@ const CropField: React.FC<CropFieldProps> = ({ plot }) => {
   const { watchAdForSpeedUp, canWatchAd, adsRemaining, loading: adLoading } = useAdSpeedUp();
   const [timeLeft, setTimeLeft] = useState(0);
   const [hasAutoHarvested, setHasAutoHarvested] = useState(false);
+  const [harvestRetryCount, setHarvestRetryCount] = useState(0);
+  const [isHarvesting, setIsHarvesting] = useState(false); // Prevent duplicate harvest attempts
   const [showCropSelection, setShowCropSelection] = useState(false);
   const [showSpeedUpModal, setShowSpeedUpModal] = useState(false);
   const [currentCrop, setCurrentCrop] = useState<Crop | null>(null);
@@ -83,26 +85,45 @@ const CropField: React.FC<CropFieldProps> = ({ plot }) => {
   }, [ready_at]);
 
   useEffect(() => {
-    const isReady = !!crop_id && !!ready_at && new Date() >= new Date(ready_at) && !hasAutoHarvested;
+    const isReady = !!crop_id && !!ready_at && new Date() >= new Date(ready_at) && !hasAutoHarvested && !isHarvesting && harvestRetryCount < 3;
 
     if (isReady) {
       setHasAutoHarvested(true);
+      setIsHarvesting(true);
       const autoHarvest = async () => {
         try {
           await harvestCrop(plot.plot_index);
+          setHarvestRetryCount(0); // Reset on success
         } catch (error) {
-          setHasAutoHarvested(false);
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          // Don't log or retry for race conditions (already harvested)
+          if (!errorMessage.toLowerCase().includes('no crop to harvest') && 
+              !errorMessage.toLowerCase().includes('already harvested')) {
+            console.error('Auto-harvest failed:', error);
+            setHarvestRetryCount(prev => prev + 1);
+            // Only reset hasAutoHarvested if we haven't exceeded max retries
+            if (harvestRetryCount < 2) {
+              setHasAutoHarvested(false);
+            }
+          } else {
+            // Race condition - plot was already harvested, just reset state
+            setHarvestRetryCount(0);
+          }
+        } finally {
+          setIsHarvesting(false);
         }
       };
 
-      const timeoutId = setTimeout(autoHarvest, 100);
+      const timeoutId = setTimeout(autoHarvest, 100 + (harvestRetryCount * 200)); // Stagger retries
       return () => clearTimeout(timeoutId);
     }
-  }, [crop_id, ready_at, hasAutoHarvested, harvestCrop, plot.plot_index]);
+  }, [crop_id, ready_at, hasAutoHarvested, isHarvesting, harvestCrop, plot.plot_index, harvestRetryCount]);
 
   useEffect(() => {
     if (crop_id && !hasAutoHarvested) {
       setHasAutoHarvested(false);
+      setHarvestRetryCount(0); // Reset retry count when new crop is planted
+      setIsHarvesting(false); // Reset harvesting flag when new crop is planted
     }
   }, [crop_id, hasAutoHarvested]);
 
@@ -113,70 +134,74 @@ const CropField: React.FC<CropFieldProps> = ({ plot }) => {
     return `${minutes}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const handlePlantCrop = async (cropId: number) => {
+  const handlePlantCrop = useCallback(async (cropId: number) => {
     try {
-      // Check if player has seeds before planting
       const crop = crops.find(c => c.id === cropId);
       if (!crop) {
         showError('Crop Not Found', 'The selected crop could not be found.');
         return;
       }
-      
+
       const seedItemId = getSeedItemId(crop.item_id);
       const seedItem = inventory.find(item => item.item_id === seedItemId);
       const seedCount = seedItem?.quantity || 0;
-      
+
       if (seedCount < 1) {
         showError('No Seeds Available', `You don't have any seeds to plant ${crop.name}.`, { seedItemId, itemId: crop.item_id, itemName: crop.name }, `Purchase seeds from the seed shop to plant ${crop.name}.`);
         return;
       }
-      
+
       await queueAction('plant_crop', { p_plot_index: plot.plot_index, p_crop_id: cropId });
       await fetchPlots();
-      await fetchInventory(); // Refresh inventory to update seed count
+      await fetchInventory();
       setShowCropSelection(false);
     } catch (error) {
-      console.error('Failed to plant crop:', error);
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Failed to plant crop:', error);
+      }
     }
-  };
+  }, [crops, inventory, plot.plot_index, showError, queueAction, fetchPlots, fetchInventory]);
 
   const handleSpeedUp = async (minutes: number) => {
-    try {
-      await applyCropSpeedUp(plot.plot_index, minutes);
-      setShowSpeedUpModal(false);
-    } catch (error) {
-      // Error handled in store
-    }
+    await applyCropSpeedUp(plot.plot_index, minutes);
+    setShowSpeedUpModal(false);
   };
 
   const handleBuyAndUseSpeedUp = async (itemId: string, minutes: number) => {
-    try {
-      await purchaseItem(itemId, true); // Use aether
-      await applyCropSpeedUp(plot.plot_index, minutes);
-      setShowSpeedUpModal(false);
-    } catch (error) {
-      // Error handled in store
-    }
+    await purchaseItem(itemId, true); // Use aether
+    await applyCropSpeedUp(plot.plot_index, minutes);
+    setShowSpeedUpModal(false);
   };
 
   const handleWatchAd = async () => {
-    try {
-      await watchAdForSpeedUp('farm', plot.plot_index);
-      await fetchPlots(); // Refresh plots to show updated timer
-    } catch (error) {
-      // Error handled in hook
-    }
+    await watchAdForSpeedUp('farm', plot.plot_index);
+    await fetchPlots(); // Refresh plots to show updated timer
   };
 
   const handleHarvest = async () => {
-    if (!isReady) return;
+    if (!isReady || isHarvesting) return; // Prevent duplicate harvest attempts
     try {
+      setIsHarvesting(true);
       setHasAutoHarvested(true); // Prevent auto-harvest from triggering
       await harvestCrop(plot.plot_index);
-      // Note: fetchPlots() is already called inside harvestCrop, no need to call it again
+      setHarvestRetryCount(0);
     } catch (error) {
-      console.error('Failed to harvest crop:', error);
-      setHasAutoHarvested(false); // Reset on error so it can retry
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      // Don't show error for race conditions (already harvested)
+      if (!errorMessage.toLowerCase().includes('no crop to harvest') && 
+          !errorMessage.toLowerCase().includes('already harvested')) {
+        console.error('Failed to harvest crop:', error);
+        setHarvestRetryCount(prev => prev + 1);
+        // Only reset hasAutoHarvested if we haven't exceeded max retries
+        if (harvestRetryCount < 2) {
+          setHasAutoHarvested(false);
+        }
+      } else {
+        // Race condition - plot was already harvested, just reset state
+        setHarvestRetryCount(0);
+      }
+    } finally {
+      setIsHarvesting(false);
     }
   };
 
@@ -351,12 +376,8 @@ const CropField: React.FC<CropFieldProps> = ({ plot }) => {
           {canWatchAd && (
             <button
               onClick={async () => {
-                try {
-                  await handleWatchAd();
-                  setShowSpeedUpModal(false);
-                } catch (error) {
-                  // Error handled in hook
-                }
+                await handleWatchAd();
+                setShowSpeedUpModal(false);
               }}
               disabled={adLoading}
               className="w-full flex items-center justify-between p-3 bg-green-700/60 hover:bg-green-600 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg transition-colors mb-4"
@@ -405,6 +426,8 @@ const CropField: React.FC<CropFieldProps> = ({ plot }) => {
     )}
     </>
   );
-};
+});
+
+CropField.displayName = 'CropField';
 
 export default CropField;

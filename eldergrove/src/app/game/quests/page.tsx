@@ -147,7 +147,7 @@ export default function QuestsPage() {
   const handleStart = async (questId: number) => {
     try {
       await startQuest(questId);
-    } catch (error) {
+    } catch {
       // Error handled in store
     }
   };
@@ -155,7 +155,7 @@ export default function QuestsPage() {
   const handleClaim = async (questId: number) => {
     try {
       await claimQuestReward(questId);
-    } catch (error) {
+    } catch {
       // Error handled in store
     }
   };

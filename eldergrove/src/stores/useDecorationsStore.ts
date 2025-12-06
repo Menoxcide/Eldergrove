@@ -63,8 +63,9 @@ export const useDecorationsStore = create<DecorationsState>((set, get) => ({
         .order('placed_at', { ascending: true })
       if (error) throw error
       setDecorations(data || [])
-    } catch (err: any) {
-      setError(err.message)
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to fetch decorations'
+      setError(errorMessage)
       console.error('Error fetching decorations:', err)
     } finally {
       setLoading(false)
@@ -83,8 +84,9 @@ export const useDecorationsStore = create<DecorationsState>((set, get) => ({
         .order('cost_crystals', { ascending: true })
       if (error) throw error
       setDecorationTypes(data || [])
-    } catch (err: any) {
-      setError(err.message)
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to fetch decoration types'
+      setError(errorMessage)
       console.error('Error fetching decoration types:', err)
     } finally {
       setLoading(false)
@@ -112,9 +114,10 @@ export const useDecorationsStore = create<DecorationsState>((set, get) => ({
       const { useGameMessageStore } = await import('@/stores/useGameMessageStore')
       useGameMessageStore.getState().addMessage('success', 'Decoration placed!')
       await fetchDecorations()
-    } catch (err: any) {
-      setError(err.message)
-      handleError(err, err.message)
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to place decoration'
+      setError(errorMessage)
+      handleError(err, errorMessage)
       throw err
     }
   },
@@ -129,9 +132,10 @@ export const useDecorationsStore = create<DecorationsState>((set, get) => ({
       const { useGameMessageStore } = await import('@/stores/useGameMessageStore')
       useGameMessageStore.getState().addMessage('success', 'Decoration removed!')
       await fetchDecorations()
-    } catch (err: any) {
-      setError(err.message)
-      handleError(err, err.message)
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to remove decoration'
+      setError(errorMessage)
+      handleError(err, errorMessage)
       throw err
     }
   },

@@ -31,7 +31,8 @@ interface PlayerState {
   aether: number
   loading: boolean
   error: string | null
-  setPlayer: (profile: PlayerProfile | null) => void
+  lastManualCrystalUpdate: number | null
+  setPlayer: (profile: PlayerProfile | null, ignoreRealtimeGuard?: boolean) => void
   setLoading: (loading: boolean) => void
   setError: (error: string | null) => void
   addCrystals: (amount: number) => void
@@ -48,7 +49,7 @@ interface PlayerState {
 export const usePlayerStore = create<PlayerState>((set, get) => ({
   id: null,
   username: null,
-  crystals: 500,
+  crystals: 0,
   level: 1,
   xp: 0,
   population: 0,
@@ -56,16 +57,68 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   aether: 0,
   loading: false,
   error: null,
-  setPlayer: (profile) => set({
-    id: profile?.id ?? null,
-    username: profile?.username ?? null,
-    crystals: profile?.crystals ?? 500,
-    level: profile?.level ?? 1,
-    xp: profile?.xp ?? 0,
-    population: profile?.population ?? 0,
-    townSize: profile?.town_size ?? 10,
-    aether: profile?.aether ?? 0,
-  }),
+  lastManualCrystalUpdate: null,
+  setPlayer: (profile, ignoreRealtimeGuard = false) => {
+    // Handle null profile (logout/clear)
+    if (!profile) {
+      set({
+        id: null,
+        username: null,
+        crystals: 0,
+        level: 1,
+        xp: 0,
+        population: 0,
+        townSize: 10,
+        aether: 0,
+        lastManualCrystalUpdate: null,
+      })
+      return
+    }
+    
+    const state = get()
+    const now = Date.now()
+    
+    // If this is a realtime update and we recently manually updated crystals, check if we should ignore it
+    if (!ignoreRealtimeGuard && state.lastManualCrystalUpdate) {
+      const timeSinceManualUpdate = now - state.lastManualCrystalUpdate
+      // Ignore realtime updates for 1 second after a manual update to prevent stale data overwrites
+      if (timeSinceManualUpdate < 1000) {
+        const currentCrystals = state.crystals
+        const newCrystals = profile.crystals ?? 0
+        
+        if (newCrystals < currentCrystals) {
+          const difference = currentCrystals - newCrystals
+          // If crystals decreased significantly, it's likely stale data
+          if (difference > 50) {
+            console.warn(`Ignoring realtime crystal update: ${newCrystals} (current: ${currentCrystals}) - likely stale data`)
+            // Keep current crystals, but update other fields
+            set({
+              id: profile.id ?? state.id,
+              username: profile.username ?? state.username,
+              crystals: currentCrystals, // Keep current value
+              level: profile.level ?? state.level,
+              xp: profile.xp ?? state.xp,
+              population: profile.population ?? state.population,
+              townSize: profile.town_size ?? state.townSize,
+              aether: profile.aether ?? state.aether,
+            })
+            return
+          }
+        }
+      }
+    }
+    
+    set({
+      id: profile.id ?? null,
+      username: profile.username ?? null,
+      crystals: profile.crystals ?? 0,
+      level: profile.level ?? 1,
+      xp: profile.xp ?? 0,
+      population: profile.population ?? 0,
+      townSize: profile.town_size ?? 10,
+      aether: profile.aether ?? 0,
+    })
+  },
   setLoading: (loading) => set({ loading }),
   setError: (error) => set({ error }),
   addCrystals: (amount) => set((state) => ({
@@ -75,7 +128,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     crystals: Math.max(0, state.crystals - amount)
   })),
   setCrystals: (amount) => set({
-    crystals: Math.max(0, amount)
+    crystals: Math.max(0, amount),
+    lastManualCrystalUpdate: Date.now() // Track when we manually update crystals
   }),
   setPopulation: (population) => set({ population }),
   setTownSize: (size) => set({ townSize: size }),
@@ -138,7 +192,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         .eq('id', user.id)
         .single()
       if (error) throw error
-      setPlayer(data)
+      setPlayer(data, true) // Ignore realtime guard for manual fetches
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to fetch player profile'
       const { setError } = get()

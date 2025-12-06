@@ -51,12 +51,8 @@ export default function FarmPage() {
   }
 
   const handleBuySeed = async (cropId: number) => {
-    try {
-      await buySeed(cropId);
-      await fetchSeedShop();
-    } catch (error) {
-      // Error already handled in store
-    }
+    await buySeed(cropId);
+    await fetchSeedShop();
   };
 
   return (

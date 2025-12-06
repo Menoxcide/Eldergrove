@@ -23,13 +23,25 @@ jest.mock('@/stores/useGameMessageStore', () => ({
 jest.mock('@/lib/audio')
 jest.mock('@/lib/crystalTransactionManager')
 
+interface MockSupabaseClient {
+  rpc: jest.MockedFunction<any>
+}
+
+interface MockPlayerStore {
+  crystals: number
+  setCrystals: jest.MockedFunction<(crystals: number) => void>
+  fetchPlayerProfile: jest.MockedFunction<() => Promise<void>>
+}
+
 const mockCreateClient = createClient as jest.MockedFunction<typeof createClient>
-const mockUsePlayerStore = usePlayerStore as any
+const mockUsePlayerStore = usePlayerStore as unknown as {
+  getState: jest.MockedFunction<() => MockPlayerStore>
+}
 const mockCrystalTransactionManager = crystalTransactionManager as jest.Mocked<typeof crystalTransactionManager>
 
 describe('useFactoryStore - Crystal Economy', () => {
-  let mockSupabaseClient: any
-  let mockPlayerStore: any
+  let mockSupabaseClient: MockSupabaseClient
+  let mockPlayerStore: MockPlayerStore
 
   beforeEach(() => {
     // Reset all mocks
@@ -39,7 +51,7 @@ describe('useFactoryStore - Crystal Economy', () => {
     mockSupabaseClient = {
       rpc: jest.fn(),
     }
-    mockCreateClient.mockReturnValue(mockSupabaseClient)
+    mockCreateClient.mockReturnValue(mockSupabaseClient as any)
 
     // Setup mock player store
     mockPlayerStore = {
@@ -49,8 +61,9 @@ describe('useFactoryStore - Crystal Economy', () => {
     }
     mockUsePlayerStore.getState.mockReturnValue(mockPlayerStore)
 
-    // Mock the crystal transaction manager to execute operations synchronously
-    mockCrystalTransactionManager.executeCrystalOperation = jest.fn(async (operation: () => Promise<void>, description: string) => { await operation(); }) as any
+    mockCrystalTransactionManager.executeCrystalOperation = jest.fn(
+      async (operation: () => Promise<void>, description: string) => { await operation(); }
+    ) as jest.MockedFunction<typeof crystalTransactionManager.executeCrystalOperation>
 
     // Reset store state
     useFactoryStore.getState().setError(null)

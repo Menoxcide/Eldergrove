@@ -7,18 +7,24 @@
 -- IMPORTANT: This feature cannot be enabled via SQL migration. It must be
 -- configured through one of the following methods:
 --
--- Option 1: Supabase Dashboard
+-- Option 1: Supabase Dashboard (REQUIRED FOR PRODUCTION)
 -- 1. Go to Authentication > Settings in your Supabase dashboard
 -- 2. Navigate to Password Security settings
 -- 3. Enable "Leaked Password Protection"
 -- 4. Save changes
 --
--- Option 2: Supabase CLI (if using config.toml)
--- Add or update the following in your supabase/config.toml:
+--    This is the recommended method for production environments as it ensures
+--    the setting is applied to your live Supabase project.
 --
--- [auth]
+-- Option 2: Supabase CLI (for local development)
+-- The setting has been added to supabase/config.toml:
+--
 -- [auth.password]
 -- leaked_password_protection = true
+--
+--    This will enable the feature for local development when using Supabase CLI.
+--    Note: This does NOT automatically enable it in production - you must use
+--    Option 1 (Dashboard) for production.
 --
 -- Option 3: Supabase Management API
 -- Use the Supabase Management API to update your project's auth settings:
@@ -33,8 +39,11 @@
 --
 -- After enabling this feature, Supabase will check user passwords against
 -- HaveIBeenPwned.org's database of compromised passwords during sign-up
--- and password reset operations.
-
+-- and password reset operations. Users attempting to use compromised passwords
+-- will receive an error message prompting them to choose a different password.
+--
+-- SECURITY NOTE: This is a security best practice that helps protect user accounts
+-- by preventing the use of passwords that have been exposed in known data breaches.
+--
 -- This is a documentation-only migration - no SQL changes are made here
 SELECT 1; -- Placeholder to make this a valid SQL migration
-

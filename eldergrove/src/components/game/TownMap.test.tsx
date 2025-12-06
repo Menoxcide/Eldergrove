@@ -80,8 +80,6 @@ describe('TownMap Component - Population Handling', () => {
   });
 
   test('canPlaceBuilding function handles population comparison safely', () => {
-    // The canPlaceBuilding function uses: (population ?? 0)
-    // This ensures undefined population is treated as 0
     render(<TownMap />);
 
     // Component renders successfully, indicating the function doesn't throw
@@ -89,8 +87,6 @@ describe('TownMap Component - Population Handling', () => {
   });
 
   test('building population requirements are compared safely', () => {
-    // The building selection uses: (population ?? 0) >= bt.population_required
-    // This prevents errors when population is undefined
     render(<TownMap />);
 
     // Component renders successfully

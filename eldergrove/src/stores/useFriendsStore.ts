@@ -41,7 +41,7 @@ export interface FriendsState {
   removeFriend: (friendId: string) => Promise<void>
   helpSpeedProduction: (friendId: string, factoryType: string, slot: number) => Promise<void>
   helpFillOrder: (friendId: string, orderId: number) => Promise<void>
-  visitFriendTown: (friendId: string) => Promise<any>
+  visitFriendTown: (friendId: string) => Promise<unknown>
   subscribeToFriends: () => () => void
 }
 
@@ -93,8 +93,9 @@ export const useFriendsStore = create<FriendsState>((set, get) => ({
 
       setFriends(friendsData || [])
       setPendingRequests(pendingData || [])
-    } catch (err: any) {
-      setError(err.message)
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to fetch friends'
+      setError(errorMessage)
       console.error('Error fetching friends:', err)
     } finally {
       setLoading(false)
@@ -111,9 +112,10 @@ export const useFriendsStore = create<FriendsState>((set, get) => ({
       const { useGameMessageStore } = await import('@/stores/useGameMessageStore')
       useGameMessageStore.getState().addMessage('success', 'Friend request sent!')
       await fetchFriends()
-    } catch (err: any) {
-      setError(err.message)
-      handleError(err, err.message)
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to send friend request'
+      setError(errorMessage)
+      handleError(err, errorMessage)
       throw err
     }
   },
@@ -128,9 +130,10 @@ export const useFriendsStore = create<FriendsState>((set, get) => ({
       const { useGameMessageStore } = await import('@/stores/useGameMessageStore')
       useGameMessageStore.getState().addMessage('success', 'Friend request accepted!')
       await fetchFriends()
-    } catch (err: any) {
-      setError(err.message)
-      handleError(err, err.message)
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to accept friend request'
+      setError(errorMessage)
+      handleError(err, errorMessage)
       throw err
     }
   },
@@ -145,9 +148,10 @@ export const useFriendsStore = create<FriendsState>((set, get) => ({
       const { useGameMessageStore } = await import('@/stores/useGameMessageStore')
       useGameMessageStore.getState().addMessage('success', 'Friend removed')
       await fetchFriends()
-    } catch (err: any) {
-      setError(err.message)
-      handleError(err, err.message)
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to remove friend'
+      setError(errorMessage)
+      handleError(err, errorMessage)
       throw err
     }
   },
@@ -163,9 +167,10 @@ export const useFriendsStore = create<FriendsState>((set, get) => ({
       if (error) throw error
       const { useGameMessageStore } = await import('@/stores/useGameMessageStore')
       useGameMessageStore.getState().addMessage('success', 'Helped friend speed up production!')
-    } catch (err: any) {
-      setError(err.message)
-      handleError(err, err.message)
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to help speed production'
+      setError(errorMessage)
+      handleError(err, errorMessage)
       throw err
     }
   },
@@ -180,9 +185,10 @@ export const useFriendsStore = create<FriendsState>((set, get) => ({
       if (error) throw error
       const { useGameMessageStore } = await import('@/stores/useGameMessageStore')
       useGameMessageStore.getState().addMessage('success', 'Helped friend fill order!')
-    } catch (err: any) {
-      setError(err.message)
-      handleError(err, err.message)
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to help fill order'
+      setError(errorMessage)
+      handleError(err, errorMessage)
       throw err
     }
   },
@@ -195,9 +201,10 @@ export const useFriendsStore = create<FriendsState>((set, get) => ({
       })
       if (error) throw error
       return data
-    } catch (err: any) {
-      setError(err.message)
-      handleError(err, err.message)
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to visit friend town'
+      setError(errorMessage)
+      handleError(err, errorMessage)
       throw err
     }
   },

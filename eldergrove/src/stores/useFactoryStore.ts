@@ -39,6 +39,7 @@ interface PurchaseSlotResult {
   success: boolean
   cost_paid: number
   new_max_slots: number
+  new_crystal_balance?: number
 }
 
 interface CollectFactoryResult {
@@ -53,6 +54,7 @@ interface UpgradeFactoryResult {
   success: boolean
   new_level: number
   unlocks_queue_slot: boolean
+  new_crystal_balance?: number
 }
 
 export interface FactoryState {
@@ -103,7 +105,9 @@ export const useFactoryStore = create<FactoryState>((set, get) => ({
       if (error) throw error
       set({ slotInfo: data })
     } catch (err: unknown) {
-      console.error('Error fetching factory slot info:', err)
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Error fetching factory slot info:', err)
+      }
     }
   },
   purchaseFactorySlot: async () => {
@@ -119,13 +123,16 @@ export const useFactoryStore = create<FactoryState>((set, get) => ({
 
       const result: PurchaseSlotResult = data
       if (result.success) {
+        // Update crystals from returned balance if available
+        if (result.new_crystal_balance !== null && result.new_crystal_balance !== undefined) {
+          usePlayerStore.getState().setCrystals(result.new_crystal_balance)
+        }
         const { useGameMessageStore } = await import('@/stores/useGameMessageStore')
         useGameMessageStore.getState().addMessage(
           'success',
           `Purchased factory slot for ${result.cost_paid} crystals! Max slots: ${result.new_max_slots}`
         )
         await getSlotInfo()
-        await usePlayerStore.getState().fetchPlayerProfile()
       }
     }, 'Purchase factory slot')
   },
@@ -191,17 +198,21 @@ export const useFactoryStore = create<FactoryState>((set, get) => ({
         { event: '*', schema: 'public', table: 'factory_queue' },
         () => {
           get().fetchQueue().catch((err) => {
-            console.error('Error in subscription callback:', err)
+            if (process.env.NODE_ENV === 'development') {
+              console.error('Error in subscription callback:', err)
+            }
           })
         }
       )
       .subscribe((status) => {
-        if (status === 'SUBSCRIBED') {
+        if (status === 'SUBSCRIBED' && process.env.NODE_ENV === 'development') {
           console.log('Subscribed to factory queue updates')
         } else if (status === 'CHANNEL_ERROR') {
           const { setError } = get()
           setError('Failed to subscribe to real-time updates')
-          console.error('Subscription error for factory queue')
+          if (process.env.NODE_ENV === 'development') {
+            console.error('Subscription error for factory queue')
+          }
         }
       })
 
@@ -219,7 +230,8 @@ export const useFactoryStore = create<FactoryState>((set, get) => ({
       })
       if (error) {
         // Log detailed error information before throwing
-        console.error(`Start production failed for factory ${factory_type}, recipe ${recipe_name}:`, {
+        if (process.env.NODE_ENV === 'development') {
+          console.error(`Start production failed for factory ${factory_type}, recipe ${recipe_name}:`, {
           message: error.message || 'No message',
           details: error.details || null,
           hint: error.hint || null,
@@ -252,7 +264,8 @@ export const useFactoryStore = create<FactoryState>((set, get) => ({
       })
       if (error) {
         // Log detailed error information before throwing
-        console.error(`Collect factory failed for slot ${slot}:`, {
+        if (process.env.NODE_ENV === 'development') {
+          console.error(`Collect factory failed for slot ${slot}:`, {
           message: error.message || 'No message',
           details: error.details || null,
           hint: error.hint || null,
@@ -276,11 +289,31 @@ export const useFactoryStore = create<FactoryState>((set, get) => ({
       await fetchQueue()
       playCollectSound()
 
+      // Create descriptive collection message similar to armory
+      let collectionMessage = 'Items Collected!'
+      if (collectionResult.output) {
+        const { getItemName } = await import('@/lib/itemUtils')
+        // Filter out crystals from output (handled separately)
+        const itemEntries = Object.entries(collectionResult.output).filter(
+          ([key]) => key.toLowerCase() !== 'crystals'
+        )
+        
+        if (itemEntries.length === 1) {
+          const [itemName, quantity] = itemEntries[0]
+          const itemId = ITEM_NAME_TO_ID[itemName.toLowerCase()]
+          if (itemId) {
+            collectionMessage = `${quantity > 1 ? quantity + 'x ' : ''}${getItemName(itemId)} ${quantity > 1 ? 'Collected' : 'Collected'}!`
+          }
+        } else if (itemEntries.length > 1) {
+          collectionMessage = `${itemEntries.length} Items Collected!`
+        }
+      }
+
       // Show visual feedback using game message system
       const { useGameMessageStore } = await import('@/stores/useGameMessageStore')
       useGameMessageStore.getState().addMessage(
         'collection',
-        'Collection Complete!',
+        collectionMessage,
         {
           items: collectionResult.output,
           crystals: collectionResult.crystals_awarded > 0 ? collectionResult.crystals_awarded : undefined,
@@ -309,7 +342,9 @@ export const useFactoryStore = create<FactoryState>((set, get) => ({
             output: typeof recipe.output === 'string' ? JSON.parse(recipe.output) : recipe.output
           }
         } catch (parseError) {
-          console.error('Error parsing recipe JSON:', parseError, recipe)
+          if (process.env.NODE_ENV === 'development') {
+            console.error('Error parsing recipe JSON:', parseError, recipe)
+          }
           return {
             ...recipe,
             input: {},
@@ -366,6 +401,10 @@ export const useFactoryStore = create<FactoryState>((set, get) => ({
       const result: UpgradeFactoryResult = data
 
       if (result.success) {
+        // Update crystals from returned balance if available
+        if (result.new_crystal_balance !== null && result.new_crystal_balance !== undefined) {
+          usePlayerStore.getState().setCrystals(result.new_crystal_balance)
+        }
         const { useGameMessageStore } = await import('@/stores/useGameMessageStore')
         useGameMessageStore.getState().addMessage(
           'success',
@@ -373,7 +412,6 @@ export const useFactoryStore = create<FactoryState>((set, get) => ({
         )
         await fetchFactories()
         await fetchInventory()
-        await usePlayerStore.getState().fetchPlayerProfile()
       }
     }, `Upgrade factory ${factoryType}`)
   },

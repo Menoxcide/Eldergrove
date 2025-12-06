@@ -62,7 +62,7 @@ export function useOfflineQueue() {
     try {
       await supabase.rpc(actionType, actionData)
       return true
-    } catch (error: any) {
+    } catch (error: unknown) {
       if (isNetworkError(error)) {
         const action: QueuedAction = {
           type: actionType,
@@ -71,7 +71,6 @@ export function useOfflineQueue() {
         }
         const queue: QueuedAction[] = (await get(QUEUE_KEY)) || []
         await set(QUEUE_KEY, [...queue, action])
-        console.log('Action queued for offline replay:', action)
         const { useGameMessageStore } = await import('@/stores/useGameMessageStore')
         useGameMessageStore.getState().addMessage('info', 'Action queued for later processing')
         return false

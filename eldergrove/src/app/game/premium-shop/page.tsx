@@ -21,7 +21,7 @@ export default function PremiumShopPage() {
   const handlePurchase = async (itemId: string, useAether: boolean) => {
     try {
       await purchaseItem(itemId, useAether);
-    } catch (error) {
+    } catch {
       // Error handled in store
     }
   };

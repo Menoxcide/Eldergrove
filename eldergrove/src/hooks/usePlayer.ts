@@ -3,6 +3,7 @@
 import { useEffect } from 'react'
 import { usePlayerStore } from '@/stores/usePlayerStore'
 import { createClient } from '@/lib/supabase/client'
+import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js'
 
 export const usePlayer = () => {
   const { id, setPlayer, setLoading, claimDailyReward } = usePlayerStore()
@@ -22,13 +23,13 @@ export const usePlayer = () => {
         if (user && isMounted) {
           const { data, error } = await supabase
             .from('profiles')
-            .select('id, username, crystals, level, xp')
+            .select('id, username, crystals, level, xp, population, town_size, aether')
             .eq('id', user.id)
             .single()
 
           if (error) throw error
 
-          setPlayer(data)
+          setPlayer(data, true) // Ignore realtime guard for manual fetches
           
           // Automatically claim daily reward when player loads
           await claimDailyReward()
@@ -53,4 +54,48 @@ export const usePlayer = () => {
       isMounted = false
     }
   }, [id, setPlayer, setLoading, claimDailyReward])
+
+  // Set up realtime subscription for profile updates (XP, level, crystals, etc.)
+  useEffect(() => {
+    if (!id) return
+
+    const supabase = createClient()
+    
+    // Subscribe to changes in the profiles table for this user
+    const channel = supabase
+      .channel(`profile-changes-${id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'profiles',
+          filter: `id=eq.${id}`,
+        },
+        (payload: RealtimePostgresChangesPayload<Record<string, unknown>>) => {
+          const newData = payload.new
+          if (newData) {
+            setPlayer({
+              id: newData.id,
+              username: newData.username,
+              crystals: newData.crystals,
+              level: newData.level,
+              xp: newData.xp,
+              population: newData.population,
+              town_size: newData.town_size,
+              aether: newData.aether,
+            })
+          }
+        }
+      )
+      .subscribe((status) => {
+        if (status === 'CHANNEL_ERROR') {
+          console.error('Error subscribing to profile changes')
+        }
+      })
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [id, setPlayer])
 }

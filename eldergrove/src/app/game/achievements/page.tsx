@@ -111,7 +111,7 @@ export default function AchievementsPage() {
   const handleClaim = async (achievementId: number) => {
     try {
       await claimAchievement(achievementId);
-    } catch (error) {
+    } catch {
       // Error handled in store
     }
   };

@@ -60,8 +60,8 @@ export interface RegattaState {
   error: string | null
   setCurrentRegatta: (regatta: RegattaEvent | null) => void
   setParticipation: (participation: RegattaParticipant | null) => void
-  setLeaderboard: (leaderboard: any[]) => void
-  setCovenLeaderboard: (leaderboard: any[]) => void
+  setLeaderboard: (leaderboard: RegattaState['leaderboard']) => void
+  setCovenLeaderboard: (leaderboard: RegattaState['covenLeaderboard']) => void
   setLoading: (loading: boolean) => void
   setError: (error: string | null) => void
   fetchCurrentRegatta: () => Promise<void>
@@ -159,8 +159,8 @@ export const useRegattaStore = create<RegattaState>((set, get) => ({
       } else {
         setParticipation(null)
       }
-    } catch (err: any) {
-      const errorMessage = err?.message || 'Failed to fetch participation'
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to fetch participation'
       setError(errorMessage)
       handleError(err, errorMessage)
     }
@@ -181,8 +181,8 @@ export const useRegattaStore = create<RegattaState>((set, get) => ({
       } else {
         setLeaderboard(data || [])
       }
-    } catch (err: any) {
-      const errorMessage = err?.message || 'Failed to fetch leaderboard'
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to fetch leaderboard'
       setError(errorMessage)
       handleError(err, errorMessage)
     }
@@ -199,8 +199,8 @@ export const useRegattaStore = create<RegattaState>((set, get) => ({
       useGameMessageStore.getState().addMessage('success', 'Joined regatta!')
       await fetchParticipation(regattaId)
       await fetchLeaderboard(regattaId)
-    } catch (err: any) {
-      const errorMessage = err?.message || 'Failed to join regatta'
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to join regatta'
       setError(errorMessage)
       handleError(err, errorMessage)
       throw err
@@ -227,8 +227,8 @@ export const useRegattaStore = create<RegattaState>((set, get) => ({
         await fetchParticipation(regattaId)
         await fetchLeaderboard(regattaId)
       }
-    } catch (err: any) {
-      const errorMessage = err?.message || 'Failed to submit task'
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to submit task'
       setError(errorMessage)
       handleError(err, errorMessage)
       throw err
@@ -246,7 +246,6 @@ export const useRegattaStore = create<RegattaState>((set, get) => ({
       const result = data as { success: boolean; rank: number; total_participants: number; crystals_awarded: number; new_crystal_balance: number }
       
       if (result.success) {
-        // Use the returned crystal balance directly to avoid race conditions
         if (result.new_crystal_balance !== null && result.new_crystal_balance !== undefined) {
           const playerStore = usePlayerStore.getState()
           playerStore.setCrystals(result.new_crystal_balance)
@@ -258,8 +257,8 @@ export const useRegattaStore = create<RegattaState>((set, get) => ({
           `Rewards claimed! Rank: ${result.rank}/${result.total_participants}, +${result.crystals_awarded} crystals`
         )
       }
-    } catch (err: any) {
-      const errorMessage = err?.message || 'Failed to claim rewards'
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to claim rewards'
       setError(errorMessage)
       handleError(err, errorMessage)
       throw err
@@ -282,9 +281,7 @@ export const useRegattaStore = create<RegattaState>((set, get) => ({
         }
       )
       .subscribe((status) => {
-        if (status === 'SUBSCRIBED') {
-          console.log(`Subscribed to regatta ${regattaId} updates`)
-        } else if (status === 'CHANNEL_ERROR') {
+        if (status === 'CHANNEL_ERROR') {
           const { setError } = get()
           setError('Failed to subscribe to real-time updates')
           console.error(`Subscription error for regatta ${regattaId}`)

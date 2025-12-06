@@ -62,7 +62,7 @@ export async function subscribeToPushNotifications(): Promise<PushSubscriptionDa
 
 export async function registerPushSubscription(
   subscriptionData: PushSubscriptionData,
-  deviceInfo?: Record<string, any>
+  deviceInfo?: Record<string, unknown>
 ): Promise<void> {
   const { createClient } = await import('./supabase/client')
   const supabase = createClient()

@@ -131,21 +131,28 @@ export const useFarmStore = create<FarmState>((set, get) => ({
     const { setError, fetchPlots } = get()
     try {
       const supabase = createClient()
-      const { data: newCrystals, error } = await supabase.rpc('harvest_plot', {
+      const { data, error } = await supabase.rpc('harvest_plot', {
         p_plot_index: plot_index
       })
       if (error) {
+        // Check if error is due to plot already being harvested (race condition)
+        const errorMessage = error.message || ''
+        if (errorMessage.includes('No crop to harvest') || errorMessage.includes('already harvested')) {
+          // Silently handle - plot was already harvested by another request
+          await fetchPlots() // Refresh to sync state
+          return
+        }
         throw error
+      }
+
+      // If data is 0 or null, plot was already harvested (race condition handled gracefully)
+      if (data === 0 || data === null || data === undefined) {
+        await fetchPlots() // Refresh to sync state
+        return
       }
 
       const { useInventoryStore } = await import('./useInventoryStore')
       await useInventoryStore.getState().fetchInventory()
-
-      const { usePlayerStore } = await import('./usePlayerStore')
-      if (newCrystals !== null && newCrystals !== undefined) {
-        usePlayerStore.getState().setCrystals(newCrystals as number)
-      }
-      await usePlayerStore.getState().fetchPlayerProfile()
 
       await fetchPlots()
 
@@ -154,8 +161,12 @@ export const useFarmStore = create<FarmState>((set, get) => ({
       useGameMessageStore.getState().addMessage('success', 'Crop harvested successfully!')
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to harvest crop'
-      setError(errorMessage)
-      handleError(err, errorMessage)
+      // Don't show error for race conditions (already harvested)
+      const errorMsg = errorMessage.toLowerCase()
+      if (!errorMsg.includes('no crop to harvest') && !errorMsg.includes('already harvested')) {
+        setError(errorMessage)
+        handleError(err, errorMessage)
+      }
       throw err
     }
   },

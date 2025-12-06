@@ -11,25 +11,27 @@ export default function OAuthCallbackPage() {
   useEffect(() => {
     const handleCallback = async () => {
       try {
-        console.log('Callback page: Handling OAuth callback');
-        console.log('Current URL:', window.location.href);
-        console.log('URL search params:', window.location.search);
-
         const supabase = createClient();
 
         // Check if there's an active session (Supabase should have established it)
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
 
-        console.log('Session check result:', session, 'error:', sessionError);
+        if (process.env.NODE_ENV === 'development') {
+          console.log('Session check result:', session, 'error:', sessionError);
+        }
 
         if (sessionError) {
-          console.error('Session error:', sessionError);
+          if (process.env.NODE_ENV === 'development') {
+            console.error('Session error:', sessionError);
+          }
           setError(sessionError.message || 'Failed to establish session');
           return;
         }
 
         if (session) {
-          console.log('Session found:', session.user?.email);
+          if (process.env.NODE_ENV === 'development') {
+            console.log('Session found:', session.user?.email);
+          }
           router.push('/game');
           return;
         }
@@ -40,18 +42,25 @@ export default function OAuthCallbackPage() {
         const errorDescription = urlParams.get('error_description');
 
         if (error) {
-          console.error('OAuth error:', error, errorDescription);
+          if (process.env.NODE_ENV === 'development') {
+            console.error('OAuth error:', error, errorDescription);
+          }
           setError(errorDescription || error || 'OAuth authentication failed');
           return;
         }
 
         // If no session and no error, something went wrong
-        console.error('No session established and no error reported');
+        if (process.env.NODE_ENV === 'development') {
+          console.error('No session established and no error reported');
+        }
         setError('Authentication failed - please try again');
 
-      } catch (err: any) {
-        console.log('Callback error:', err);
-        setError(err.message || 'An unexpected error occurred');
+      } catch (err: unknown) {
+        if (process.env.NODE_ENV === 'development') {
+          console.log('Callback error:', err);
+        }
+        const errorMessage = err instanceof Error ? err.message : 'An unexpected error occurred'
+        setError(errorMessage);
       }
     };
 

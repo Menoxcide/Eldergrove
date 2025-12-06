@@ -1,6 +1,6 @@
 // Error parsing and formatting utilities for user-friendly error messages
 
-import { getItemName, getItemIcon, getItemNameWithLevel } from './itemUtils';
+import { getItemName, getItemIcon, getItemNameWithLevel, getArmoryTypeName } from './itemUtils';
 import { getItemIdFromName } from './itemMappings';
 
 export interface ParsedError {
@@ -168,6 +168,7 @@ export function parseError(error: unknown): ParsedError {
       details: {
         factoryType,
         maxSlots,
+        currentSlots: maxSlots, // Queue is full, so current = max
       },
       suggestion: 'Wait for current production to finish, or purchase additional factory slots to increase capacity.',
       icon: '🏭',
@@ -186,9 +187,52 @@ export function parseError(error: unknown): ParsedError {
       details: {
         factoryType,
         maxSlots,
+        currentSlots: maxSlots, // Queue is full, so current = max
       },
       suggestion: 'Purchase additional factory slots from the upgrade menu to increase capacity.',
       icon: '🏭',
+    };
+  }
+
+  // Armory slots full
+  const armorySlotMatch = errorMessage.match(/Armory "([^"]+)" queue is full \(max (\d+) slots?\)/i);
+  if (armorySlotMatch) {
+    const armoryType = armorySlotMatch[1];
+    const maxSlots = parseInt(armorySlotMatch[2]);
+    const armoryName = getArmoryTypeName(armoryType);
+    // When queue is full, current slots equals max slots
+    return {
+      type: 'slot',
+      title: 'Armory Queue Full',
+      message: `Your ${armoryName} has reached its maximum capacity of ${maxSlots} slots.`,
+      details: {
+        factoryType: armoryType, // Reusing factoryType field for consistency
+        maxSlots,
+        currentSlots: maxSlots, // Queue is full, so current = max
+      },
+      suggestion: 'Wait for current crafting to finish, or upgrade your armory to unlock more recipes.',
+      icon: '⚔️',
+    };
+  }
+
+  // Armory slots full with upgrade suggestion
+  const armorySlotUpgradeMatch = errorMessage.match(/Armory "([^"]+)" queue is full \(max (\d+) slots?\)\. Purchase more slots to increase capacity\./i);
+  if (armorySlotUpgradeMatch) {
+    const armoryType = armorySlotUpgradeMatch[1];
+    const maxSlots = parseInt(armorySlotUpgradeMatch[2]);
+    const armoryName = getArmoryTypeName(armoryType);
+    // When queue is full, current slots equals max slots
+    return {
+      type: 'slot',
+      title: 'Armory Queue Full',
+      message: `Your ${armoryName} has reached its maximum capacity of ${maxSlots} slots.`,
+      details: {
+        factoryType: armoryType, // Reusing factoryType field for consistency
+        maxSlots,
+        currentSlots: maxSlots, // Queue is full, so current = max
+      },
+      suggestion: 'Purchase additional armory slots from the upgrade menu to increase capacity.',
+      icon: '⚔️',
     };
   }
 
@@ -361,7 +405,8 @@ export function formatErrorForDialog(parsedError: ParsedError): string {
       message += `\nAvailable: ${parsedError.details.available.toLocaleString()}`;
     }
     if (parsedError.details.maxSlots !== undefined) {
-      message += `\n\nSlots: ${parsedError.details.currentSlots || 0}/${parsedError.details.maxSlots}`;
+      const currentSlots = parsedError.details.currentSlots ?? parsedError.details.maxSlots;
+      message += `\n\nSlots: ${currentSlots}/${parsedError.details.maxSlots}`;
     }
     if (parsedError.details.itemName) {
       message += `\n\nItem: ${parsedError.details.itemName}`;

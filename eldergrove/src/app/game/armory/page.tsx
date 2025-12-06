@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import ArmoryQueueSlot from '@/components/game/ArmoryQueueSlot';
 import ArmoryRecipeCard from '@/components/game/ArmoryRecipeCard';
 import { useArmoryStore } from '@/stores/useArmoryStore';
@@ -22,6 +22,7 @@ export default function ArmoryPage() {
     fetchRecipes,
     fetchInventory,
     startCraft,
+    collectArmory,
     upgradeArmory,
     canCraftRecipe,
     subscribeToQueueUpdates
@@ -29,6 +30,7 @@ export default function ArmoryPage() {
   const { crystals } = usePlayerStore();
   const [selectedArmory, setSelectedArmory] = useState<string | null>(null);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const hasAutoCollected = useRef(false);
 
   useEffect(() => {
     fetchArmories();
@@ -45,21 +47,53 @@ export default function ArmoryPage() {
     }
   }, [armories, selectedArmory]);
 
+  // Auto-collect ready items when they become available
+  useEffect(() => {
+    if (loading) return;
+
+    if (queue.length === 0) {
+      hasAutoCollected.current = false;
+      return;
+    }
+
+    // Skip if we've already attempted auto-collect for the current queue state
+    if (hasAutoCollected.current) return;
+
+    const autoCollectReady = async () => {
+      const readySlots = queue.filter(
+        (item) => item.finishes_at && new Date(item.finishes_at) <= new Date()
+      );
+
+      if (readySlots.length > 0) {
+        // Set flag before collecting to prevent duplicate attempts
+        hasAutoCollected.current = true;
+
+        // Collect all ready items
+        for (const readyItem of readySlots) {
+          try {
+            await collectArmory(readyItem.slot);
+            await new Promise(resolve => setTimeout(resolve, 300));
+          } catch (error) {
+            console.error('Auto-collect failed for slot', readyItem.slot, error);
+          }
+        }
+      }
+    };
+
+    // Auto-collect ready items
+    autoCollectReady();
+  }, [queue, loading, collectArmory]); // Only run when queue or loading changes
+
   const handleStartCraft = async (recipeName: string) => {
     if (!selectedArmory) return;
-    try {
-      await startCraft(selectedArmory, recipeName);
-      await fetchInventory(); // Refresh inventory after starting
-    } catch (error) {
-      // Error already handled in store
-    }
+    await startCraft(selectedArmory, recipeName);
+    await fetchInventory();
   };
 
   const maxSlots = 2;
   const currentQueueSlots = queue.filter(q => q.armory_type === selectedArmory).length;
   const emptySlots = maxSlots - currentQueueSlots;
 
-  // Get selected armory info for upgrade button
   const selectedArmoryData = selectedArmory 
     ? armories.find(a => a.armory_type === selectedArmory)
     : null;
@@ -67,23 +101,17 @@ export default function ArmoryPage() {
   const isMaxLevel = armoryLevel >= 5;
   const upgradeCost = armoryLevel > 0 ? 1000 * armoryLevel : 0;
 
-  // Handle upgrade button click
   const handleUpgradeClick = () => {
     if (!selectedArmory || isMaxLevel) return;
     setShowUpgradeModal(true);
   };
 
-  // Handle upgrade confirmation
   const handleUpgradeConfirm = async () => {
     if (!selectedArmory) return;
-    try {
-      await upgradeArmory(selectedArmory);
-      await fetchArmories();
-      await fetchInventory();
-      setShowUpgradeModal(false);
-    } catch (error) {
-      // Error handled in store
-    }
+    await upgradeArmory(selectedArmory);
+    await fetchArmories();
+    await fetchInventory();
+    setShowUpgradeModal(false);
   };
 
   if (loading) {

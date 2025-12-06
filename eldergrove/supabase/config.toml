@@ -168,6 +168,12 @@ web3 = 30
 # provider = "hcaptcha"
 # secret = ""
 
+# Enable leaked password protection. When enabled, Supabase checks passwords against
+# HaveIBeenPwned.org's database of compromised passwords during sign-up and password reset.
+# This helps prevent users from using passwords that have been exposed in data breaches.
+# IMPORTANT: This must also be enabled in the Supabase Dashboard for production.
+# leaked_password_protection = true
+
 [auth.email]
 # Allow/disallow new user signups via email to your project.
 enable_signup = true

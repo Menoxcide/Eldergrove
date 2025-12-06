@@ -45,6 +45,7 @@ export async function getCovenByPlayerId(playerId: string): Promise<CovenWithMem
     .from('coven')
     .select('*')
     .eq('id', memberData.coven_id)
+    .is('deleted_at', null)
     .single();
 
   if (covenError) {
@@ -64,20 +65,20 @@ export async function getCovenByPlayerId(playerId: string): Promise<CovenWithMem
     throw membersError;
   }
 
-  const membersWithUsernames: CovenMember[] = await Promise.all(
-    (members || []).map(async (member) => {
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('username')
-        .eq('id', member.player_id)
-        .single();
-      
-      return {
-        ...member,
-        username: profile?.username || null,
-      };
-    })
-  );
+  // Optimize N+1 queries: fetch all usernames in one query
+  const playerIds = (members || []).map(member => member.player_id);
+  const { data: profiles } = await supabase
+    .from('profiles')
+    .select('id, username')
+    .in('id', playerIds);
+
+  // Create a map for quick lookup
+  const usernameMap = new Map(profiles?.map(profile => [profile.id, profile.username]) || []);
+
+  const membersWithUsernames: CovenMember[] = (members || []).map(member => ({
+    ...member,
+    username: usernameMap.get(member.player_id) || null,
+  }));
 
   return {
     ...coven,
@@ -86,11 +87,55 @@ export async function getCovenByPlayerId(playerId: string): Promise<CovenWithMem
 }
 
 export async function createCoven(name: string, emblem: string | null = null): Promise<Coven> {
+  // Validate coven name
+  const trimmedName = name.trim();
+  if (trimmedName.length === 0) {
+    throw new Error('Coven name cannot be empty');
+  }
+  if (trimmedName.length > 50) {
+    throw new Error('Coven name cannot exceed 50 characters');
+  }
+  // Allow only alphanumeric characters, spaces, hyphens, and apostrophes
+  if (!/^[a-zA-Z0-9\s\-']+$/.test(trimmedName)) {
+    throw new Error('Coven name can only contain letters, numbers, spaces, hyphens, and apostrophes');
+  }
+
+  // Validate emblem if provided
+  if (emblem && emblem.length > 10) {
+    throw new Error('Emblem cannot exceed 10 characters');
+  }
+
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
   if (!user) {
     throw new Error('Not authenticated');
+  }
+
+  // Check if user is already in a coven
+  const { data: existingMember } = await supabase
+    .from('coven_members')
+    .select('coven_id')
+    .eq('player_id', user.id)
+    .single();
+
+  if (existingMember) {
+    // Check if the coven still exists and is not deleted
+    const { data: existingCoven } = await supabase
+      .from('coven')
+      .select('id, name, deleted_at')
+      .eq('id', existingMember.coven_id)
+      .single();
+
+    if (existingCoven && !existingCoven.deleted_at) {
+      throw new Error('You are already in a coven. Please leave your current coven before creating a new one.');
+    }
+    if (existingCoven?.deleted_at) {
+      await supabase
+        .from('coven_members')
+        .delete()
+        .eq('player_id', user.id);
+    }
   }
 
   const { data: coven, error: covenError } = await supabase
@@ -104,6 +149,9 @@ export async function createCoven(name: string, emblem: string | null = null): P
     .single();
 
   if (covenError) {
+    if (covenError.code === '23505') {
+      throw new Error('A coven with this name already exists. Please choose a different name.');
+    }
     throw covenError;
   }
 
@@ -117,6 +165,9 @@ export async function createCoven(name: string, emblem: string | null = null): P
 
   if (memberError) {
     await supabase.from('coven').delete().eq('id', coven.id);
+    if (memberError.code === '23505') {
+      throw new Error('You are already in a coven. Please leave your current coven before creating a new one.');
+    }
     throw memberError;
   }
 
@@ -124,11 +175,31 @@ export async function createCoven(name: string, emblem: string | null = null): P
 }
 
 export async function joinCoven(covenId: string): Promise<void> {
+  // Validate covenId is a valid UUID
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  if (!uuidRegex.test(covenId)) {
+    throw new Error('Invalid coven ID format');
+  }
+
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
   if (!user) {
     throw new Error('Not authenticated');
+  }
+
+  const { data: coven, error: covenCheckError } = await supabase
+    .from('coven')
+    .select('id, deleted_at')
+    .eq('id', covenId)
+    .single();
+
+  if (covenCheckError || !coven) {
+    throw new Error('Coven not found');
+  }
+
+  if (coven.deleted_at) {
+    throw new Error('This coven has been deleted');
   }
 
   const { data: existingMember } = await supabase
@@ -138,7 +209,21 @@ export async function joinCoven(covenId: string): Promise<void> {
     .single();
 
   if (existingMember) {
-    throw new Error('You are already in a coven');
+    const { data: existingCoven } = await supabase
+      .from('coven')
+      .select('id, deleted_at')
+      .eq('id', existingMember.coven_id)
+      .single();
+
+    if (existingCoven && !existingCoven.deleted_at) {
+      throw new Error('You are already in a coven');
+    }
+    if (existingCoven?.deleted_at) {
+      await supabase
+        .from('coven_members')
+        .delete()
+        .eq('player_id', user.id);
+    }
   }
 
   const { error } = await supabase
@@ -150,6 +235,10 @@ export async function joinCoven(covenId: string): Promise<void> {
     });
 
   if (error) {
+    // Check if it's a unique constraint violation (already in a coven)
+    if (error.code === '23505') {
+      throw new Error('You are already in a coven');
+    }
     throw error;
   }
 }
@@ -281,39 +370,50 @@ export async function getCovenMembers(covenId: string): Promise<CovenMember[]> {
     throw error;
   }
 
-  const membersWithUsernames: CovenMember[] = await Promise.all(
-    (members || []).map(async (member) => {
-      try {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('username')
-          .eq('id', member.player_id)
-          .single();
-        
-        return {
-          ...member,
-          username: profile?.username || null,
-        };
-      } catch (err) {
-        console.warn(`Failed to fetch username for member ${member.player_id}:`, err);
-        return {
-          ...member,
-          username: null,
-        };
-      }
-    })
-  );
+  // Optimize N+1 queries: fetch all usernames in one query
+  const playerIds = (members || []).map(member => member.player_id);
+  const { data: profiles } = await supabase
+    .from('profiles')
+    .select('id, username')
+    .in('id', playerIds);
+
+  // Create a map for quick lookup
+  const usernameMap = new Map(profiles?.map(profile => [profile.id, profile.username]) || []);
+
+  const membersWithUsernames: CovenMember[] = (members || []).map(member => ({
+    ...member,
+    username: usernameMap.get(member.player_id) || null,
+  }));
 
   return membersWithUsernames;
 }
 
 export async function searchCovens(query: string, limit: number = 20): Promise<Coven[]> {
+  // Validate search query
+  const trimmedQuery = query.trim();
+  if (trimmedQuery.length === 0) {
+    throw new Error('Search query cannot be empty');
+  }
+  if (trimmedQuery.length > 50) {
+    throw new Error('Search query cannot exceed 50 characters');
+  }
+  // Allow only alphanumeric characters, spaces, hyphens, and apostrophes
+  if (!/^[a-zA-Z0-9\s\-']+$/.test(trimmedQuery)) {
+    throw new Error('Search query can only contain letters, numbers, spaces, hyphens, and apostrophes');
+  }
+
+  // Validate limit
+  if (limit < 1 || limit > 50) {
+    throw new Error('Limit must be between 1 and 50');
+  }
+
   const supabase = createClient();
 
   const { data: covens, error } = await supabase
     .from('coven')
     .select('*')
     .ilike('name', `%${query}%`)
+    .is('deleted_at', null)
     .limit(limit)
     .order('created_at', { ascending: false });
 
@@ -330,6 +430,7 @@ export async function getAllCovens(limit: number = 50): Promise<Coven[]> {
   const { data: covens, error } = await supabase
     .from('coven')
     .select('*')
+    .is('deleted_at', null)
     .limit(limit)
     .order('created_at', { ascending: false });
 

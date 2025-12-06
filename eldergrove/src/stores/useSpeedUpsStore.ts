@@ -5,7 +5,7 @@ import { handleError } from '@/hooks/useErrorHandler'
 export interface SpeedUp {
   id: number
   player_id: string
-  speed_up_type: 'factory' | 'crop' | 'global'
+  speed_up_type: 'factory' | 'crop' | 'global' | 'armory'
   target_id: number | null
   minutes: number
   used_at: string
@@ -22,6 +22,7 @@ export interface SpeedUpsState {
   fetchSpeedUps: () => Promise<void>
   applyFactorySpeedUp: (factoryType: string, slot: number, minutes: number) => Promise<void>
   applyCropSpeedUp: (plotIndex: number, minutes: number) => Promise<void>
+  applyArmorySpeedUp: (armoryType: string, slot: number, minutes: number) => Promise<void>
   subscribeToSpeedUps: () => () => void
 }
 
@@ -50,8 +51,8 @@ export const useSpeedUpsStore = create<SpeedUpsState>((set, get) => ({
         .order('used_at', { ascending: false })
       if (error) throw error
       setSpeedUps(data || [])
-    } catch (err: any) {
-      const errorMessage = err?.message || 'Failed to fetch speed-ups'
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to fetch speed-ups'
       setError(errorMessage)
       handleError(err, errorMessage)
     } finally {
@@ -74,11 +75,10 @@ export const useSpeedUpsStore = create<SpeedUpsState>((set, get) => ({
         `Speed-up applied! Production accelerated by ${minutes} minutes.`
       )
       await fetchSpeedUps()
-      // Refresh factory queue
       const { useFactoryStore } = await import('./useFactoryStore')
       useFactoryStore.getState().fetchQueue()
-    } catch (err: any) {
-      const errorMessage = err?.message || 'Failed to apply speed-up'
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to apply speed-up'
       setError(errorMessage)
       handleError(err, errorMessage)
       throw err
@@ -102,8 +102,34 @@ export const useSpeedUpsStore = create<SpeedUpsState>((set, get) => ({
       // Refresh farm plots
       const { useFarmStore } = await import('./useFarmStore')
       useFarmStore.getState().fetchPlots()
-    } catch (err: any) {
-      const errorMessage = err?.message || 'Failed to apply speed-up'
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to apply speed-up'
+      setError(errorMessage)
+      handleError(err, errorMessage)
+      throw err
+    }
+  },
+  applyArmorySpeedUp: async (armoryType: string, slot: number, minutes: number) => {
+    const { fetchSpeedUps, setError } = get()
+    try {
+      const supabase = createClient()
+      const { error } = await supabase.rpc('apply_armory_speed_up', {
+        p_armory_type: armoryType,
+        p_slot: slot,
+        p_minutes: minutes
+      })
+      if (error) throw error
+      const { useGameMessageStore } = await import('@/stores/useGameMessageStore')
+      useGameMessageStore.getState().addMessage(
+        'success',
+        `Speed-up applied! Armory production accelerated by ${minutes} minutes.`
+      )
+      await fetchSpeedUps()
+      // Refresh armory queue
+      const { useArmoryStore } = await import('./useArmoryStore')
+      useArmoryStore.getState().fetchQueue()
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to apply speed-up'
       setError(errorMessage)
       handleError(err, errorMessage)
       throw err
@@ -123,9 +149,7 @@ export const useSpeedUpsStore = create<SpeedUpsState>((set, get) => ({
         }
       )
       .subscribe((status) => {
-        if (status === 'SUBSCRIBED') {
-          console.log('Subscribed to speed-ups updates')
-        } else if (status === 'CHANNEL_ERROR') {
+        if (status === 'CHANNEL_ERROR') {
           const { setError } = get()
           setError('Failed to subscribe to real-time updates')
           console.error('Subscription error for speed-ups')

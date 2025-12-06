@@ -1,8 +1,3 @@
--- Fix two mining issues:
--- 1. mine_ore function: v_ore_type may be unassigned when ore_type is not found
--- 2. upgrade_mining_tool function: ensure crystals are properly checked and deducted
-
--- Fix mine_ore function: check if v_ore_type was found before accessing properties
 CREATE OR REPLACE FUNCTION public.mine_ore(p_tool_type text DEFAULT 'basic_pickaxe')
 RETURNS jsonb
 LANGUAGE plpgsql
