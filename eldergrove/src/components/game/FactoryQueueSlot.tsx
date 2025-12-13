@@ -6,6 +6,7 @@ import { useOfflineQueue } from '@/hooks/useOfflineQueue';
 import { useSpeedUpsStore } from '@/stores/useSpeedUpsStore';
 import { usePremiumShopStore } from '@/stores/usePremiumShopStore';
 import { useAdSpeedUp } from '@/hooks/useAdSpeedUp';
+import { useErrorHandler } from '@/hooks/useErrorHandler';
 import { useFactoryStore } from '@/stores/useFactoryStore';
 import { createClient } from '@/lib/supabase/client';
 import Tooltip from '@/components/ui/Tooltip';
@@ -23,6 +24,7 @@ const FactoryQueueSlot: React.FC<FactoryQueueSlotProps> = React.memo(({ queueIte
   const { queueAction } = useOfflineQueue();
   const { applyFactorySpeedUp } = useSpeedUpsStore();
   const { items: premiumItems, purchaseItem } = usePremiumShopStore();
+  const { handleError } = useErrorHandler();
   const { watchAdForSpeedUp, canWatchAd, adsRemaining, loading: adLoading } = useAdSpeedUp();
   const { fetchQueue } = useFactoryStore();
 
@@ -40,7 +42,7 @@ const FactoryQueueSlot: React.FC<FactoryQueueSlotProps> = React.memo(({ queueIte
           setRecipeName(data.name);
         }
       } catch (error) {
-        console.error('Error fetching recipe name:', error);
+        handleError(error, 'Error fetching recipe name');
       }
     };
 

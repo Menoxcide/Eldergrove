@@ -74,16 +74,16 @@ export const usePlayer = () => {
         },
         (payload: RealtimePostgresChangesPayload<Record<string, unknown>>) => {
           const newData = payload.new
-          if (newData) {
+          if (newData && typeof newData === 'object' && 'id' in newData) {
             setPlayer({
-              id: newData.id,
-              username: newData.username,
-              crystals: newData.crystals,
-              level: newData.level,
-              xp: newData.xp,
-              population: newData.population,
-              town_size: newData.town_size,
-              aether: newData.aether,
+              id: newData.id as string,
+              username: newData.username as string,
+              crystals: newData.crystals as number,
+              level: newData.level as number,
+              xp: newData.xp as number,
+              population: newData.population as number,
+              town_size: newData.town_size as number,
+              aether: newData.aether as number,
             })
           }
         }

@@ -24,6 +24,7 @@ export interface BuildingType {
   max_level: number
   max_count: number | null
   level_required?: number
+  prerequisite_building_type?: string | null
 }
 
 export interface CityState {
@@ -109,12 +110,26 @@ export const useCityStore = create<CityState>((set, get) => ({
     const { fetchBuildings, setError } = get()
     try {
       const supabase = createClient()
-      const { error } = await supabase.rpc('place_building', {
-        p_building_type: buildingType,
-        p_grid_x: gridX,
-        p_grid_y: gridY
-      })
-      if (error) throw error
+      // Ensure parameters are the correct types
+      const params = {
+        p_building_type: String(buildingType),
+        p_grid_x: Number(gridX),
+        p_grid_y: Number(gridY)
+      }
+      
+      // Validate parameters before calling
+      if (!params.p_building_type || isNaN(params.p_grid_x) || isNaN(params.p_grid_y)) {
+        throw new Error('Invalid building placement parameters')
+      }
+      
+      const { data, error } = await supabase.rpc('place_building', params)
+      
+      if (error) {
+        console.error('[placeBuilding] RPC error:', error)
+        console.error('[placeBuilding] Parameters sent:', params)
+        throw error
+      }
+      
       const { useGameMessageStore } = await import('@/stores/useGameMessageStore')
       useGameMessageStore.getState().addMessage('success', 'Building placed!')
       await fetchBuildings()

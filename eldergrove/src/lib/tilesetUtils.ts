@@ -20,9 +20,18 @@ export interface TileMetadata {
 }
 
 export interface TilesetMetadata {
-  format: string;
+  format?: string;
   tiles: TileMetadata[];
-  tileset_image: {
+  tileset_data?: {
+    tiles: TileMetadata[];
+    tile_size?: {
+      width: number;
+      height: number;
+    };
+    total_tiles?: number;
+    terrain_types?: string[];
+  };
+  tileset_image?: {
     filename: string;
     dimensions: {
       width: number;
@@ -68,43 +77,86 @@ export function getRoadTile(
 /**
  * Create a data URL for a specific tile from a tileset image
  * This extracts a tile region from the tileset PNG using canvas
+ * Includes retry logic and better error handling for CORS issues
  */
 export async function extractTileImage(
   tilesetImageUrl: string,
-  tileMetadata: TileMetadata
+  tileMetadata: TileMetadata,
+  retries: number = 2
 ): Promise<string> {
   return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    
-    img.onload = () => {
-      const canvas = document.createElement('canvas');
-      canvas.width = tileMetadata.bounding_box.width;
-      canvas.height = tileMetadata.bounding_box.height;
-      const ctx = canvas.getContext('2d');
+    const attemptLoad = (attempt: number) => {
+      const img = new Image();
       
-      if (!ctx) {
-        reject(new Error('Could not get canvas context'));
-        return;
+      // Try with CORS first, fallback to no CORS if that fails
+      if (attempt === 0) {
+        img.crossOrigin = 'anonymous';
       }
       
-      ctx.drawImage(
-        img,
-        tileMetadata.bounding_box.x,
-        tileMetadata.bounding_box.y,
-        tileMetadata.bounding_box.width,
-        tileMetadata.bounding_box.height,
-        0,
-        0,
-        tileMetadata.bounding_box.width,
-        tileMetadata.bounding_box.height
-      );
+      img.onload = () => {
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = tileMetadata.bounding_box.width;
+          canvas.height = tileMetadata.bounding_box.height;
+          const ctx = canvas.getContext('2d');
+          
+          if (!ctx) {
+            if (attempt < retries) {
+              attemptLoad(attempt + 1);
+            } else {
+              reject(new Error('Could not get canvas context'));
+            }
+            return;
+          }
+          
+          // Validate bounding box
+          if (
+            tileMetadata.bounding_box.x < 0 ||
+            tileMetadata.bounding_box.y < 0 ||
+            tileMetadata.bounding_box.width <= 0 ||
+            tileMetadata.bounding_box.height <= 0
+          ) {
+            reject(new Error('Invalid tile bounding box'));
+            return;
+          }
+          
+          ctx.drawImage(
+            img,
+            tileMetadata.bounding_box.x,
+            tileMetadata.bounding_box.y,
+            tileMetadata.bounding_box.width,
+            tileMetadata.bounding_box.height,
+            0,
+            0,
+            tileMetadata.bounding_box.width,
+            tileMetadata.bounding_box.height
+          );
+          
+          resolve(canvas.toDataURL('image/png'));
+        } catch (error) {
+          if (attempt < retries) {
+            attemptLoad(attempt + 1);
+          } else {
+            reject(error instanceof Error ? error : new Error('Failed to extract tile'));
+          }
+        }
+      };
       
-      resolve(canvas.toDataURL('image/png'));
+      img.onerror = (error) => {
+        if (attempt < retries) {
+          // Retry without CORS if first attempt failed
+          attemptLoad(attempt + 1);
+        } else {
+          const errorMsg = error instanceof Error ? error.message : 'Failed to load tileset image';
+          console.warn(`Failed to load tileset image after ${retries + 1} attempts:`, errorMsg);
+          reject(new Error(errorMsg));
+        }
+      };
+      
+      img.src = tilesetImageUrl;
     };
     
-    img.onerror = () => reject(new Error('Failed to load tileset image'));
-    img.src = tilesetImageUrl;
+    attemptLoad(0);
   });
 }
 
@@ -166,12 +218,64 @@ export function getRoadCorners(
 
 /**
  * Load tileset metadata from URL
+ * Includes retry logic and better error handling
  */
-export async function loadTilesetMetadata(metadataUrl: string): Promise<TilesetMetadata> {
-  const response = await fetch(metadataUrl);
-  if (!response.ok) {
-    throw new Error(`Failed to load tileset metadata: ${response.statusText}`);
+export async function loadTilesetMetadata(
+  metadataUrl: string,
+  retries: number = 2
+): Promise<TilesetMetadata> {
+  let lastError: Error | null = null;
+  
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const response = await fetch(metadataUrl, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+        },
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Failed to load tileset metadata: ${response.status} ${response.statusText}`);
+      }
+      
+      const rawMetadata = await response.json();
+      
+      // Normalize metadata structure - handle both formats:
+      // 1. Direct format: { tiles: [...] }
+      // 2. Nested format: { tileset_data: { tiles: [...] } }
+      let tiles: TileMetadata[] | undefined;
+      
+      if (rawMetadata.tiles && Array.isArray(rawMetadata.tiles)) {
+        // Direct format
+        tiles = rawMetadata.tiles;
+      } else if (rawMetadata.tileset_data?.tiles && Array.isArray(rawMetadata.tileset_data.tiles)) {
+        // Nested format - extract tiles from tileset_data
+        tiles = rawMetadata.tileset_data.tiles;
+      }
+      
+      if (!tiles || tiles.length === 0) {
+        throw new Error('Invalid tileset metadata: missing tiles array');
+      }
+      
+      // Return normalized metadata structure
+      const normalizedMetadata: TilesetMetadata = {
+        ...rawMetadata,
+        tiles,
+        // Preserve tileset_data if it exists for other uses
+        tileset_data: rawMetadata.tileset_data,
+      };
+      
+      return normalizedMetadata;
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error('Unknown error loading metadata');
+      if (attempt < retries) {
+        // Wait before retry (exponential backoff)
+        await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 100));
+      }
+    }
   }
-  return response.json();
+  
+  throw lastError || new Error('Failed to load tileset metadata after retries');
 }
 

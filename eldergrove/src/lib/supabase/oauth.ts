@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/client';
+import { handleError } from '@/hooks/useErrorHandler';
 
 export const signInWithGoogle = async () => {
   const supabase = createClient();
@@ -21,9 +22,7 @@ export const signInWithGoogle = async () => {
   }
 
   if (error) {
-    if (process.env.NODE_ENV === 'development') {
-      console.error('Error signing in with Google:', error);
-    }
+    handleError(error, 'Error signing in with Google');
     return { error };
   }
 

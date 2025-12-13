@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { Road } from '@/stores/useRoadsStore';
-import { gridToIsometric, TILE_WIDTH, TILE_HEIGHT, getZIndex } from '@/lib/isometricUtils';
+import { gridToIsometric, TILE_WIDTH, TILE_HEIGHT, getRoadZIndex } from '@/lib/isometricUtils';
 import { useAssetStore } from '@/stores/useAssetStore';
 
 interface RoadTileProps {
@@ -40,8 +40,8 @@ const RoadTile: React.FC<RoadTileProps> = ({
   
   const zIndex = useMemo(() => {
     return useIsometric && gridX !== undefined && gridY !== undefined
-      ? getZIndex(gridX, gridY)
-      : 1;
+      ? getRoadZIndex(gridX, gridY, 20) // Use road-specific z-index
+      : 1000; // Default road z-index when not isometric
   }, [useIsometric, gridX, gridY]);
 
   const getCachedImage = useAssetStore((state) => state.getCachedImage);

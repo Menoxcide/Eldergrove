@@ -86,6 +86,17 @@ export function useAdSpeedUp() {
       const result = data as { success: boolean; ads_remaining: number };
 
       if (result.success) {
+        // Update eligibility state immediately with the response value for instant feedback
+        setEligibility((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            ads_remaining: result.ads_remaining,
+            ads_watched_this_hour: prev.ads_watched_this_hour + 1,
+            can_watch: result.ads_remaining > 0
+          };
+        });
+        
         const { useGameMessageStore } = await import('@/stores/useGameMessageStore');
         useGameMessageStore.getState().addMessage('success', `Production sped up by ${minutesReduced} minutes!`);
         await checkEligibility();

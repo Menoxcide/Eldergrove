@@ -5,6 +5,8 @@ import { usePlayerStore } from '@/stores/usePlayerStore';
 import { requestNotificationPermission, subscribeToPushNotifications, registerPushSubscription, updateNotificationPreferences } from '@/lib/pushNotifications';
 import { createClient } from '@/lib/supabase/client';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
+import { clearAllPlayerData } from '@/lib/clearPlayerData';
+import { useRouter } from 'next/navigation';
 
 export default function SettingsPage() {
   const { aether, crystals } = usePlayerStore();
@@ -18,7 +20,9 @@ export default function SettingsPage() {
     coven_task_complete: true
   });
   const [loading, setLoading] = useState(false);
+  const [clearingData, setClearingData] = useState(false);
   const { handleError, showError } = useErrorHandler();
+  const router = useRouter();
 
   useEffect(() => {
     checkNotificationStatus();
@@ -104,6 +108,37 @@ export default function SettingsPage() {
     }
   };
 
+  const handleClearData = async () => {
+    const confirmMessage = 'Are you sure you want to clear all player data and cache? This will:\n\n' +
+      '• Clear IndexedDB (offline queue)\n' +
+      '• Clear localStorage\n' +
+      '• Optionally clear all buildings, roads, and decorations from the database\n\n' +
+      'This action cannot be undone!';
+    
+    if (!confirm(confirmMessage)) {
+      return;
+    }
+
+    const clearSupabase = confirm('Also clear all buildings, roads, and decorations from the database?');
+    
+    setClearingData(true);
+    try {
+      await clearAllPlayerData(clearSupabase);
+      const { useGameMessageStore } = await import('@/stores/useGameMessageStore');
+      useGameMessageStore.getState().addMessage('success', 'All player data cleared! Refreshing...');
+      
+      // Refresh the page after a short delay
+      setTimeout(() => {
+        router.refresh();
+        window.location.reload();
+      }, 1000);
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to clear player data';
+      handleError(error, errorMessage);
+      setClearingData(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-indigo-900 p-4">
       <div className="max-w-4xl mx-auto">
@@ -165,6 +200,25 @@ export default function SettingsPage() {
               </div>
             </div>
           )}
+        </div>
+
+        {/* Developer Tools */}
+        <div className="bg-white/10 backdrop-blur-md rounded-2xl p-6 border border-red-500/30">
+          <h2 className="text-2xl font-bold text-white mb-4">Developer Tools</h2>
+          <p className="text-slate-300 mb-4 text-sm">
+            Clear all cached data and optionally reset your town layout. Use with caution!
+          </p>
+          <button
+            onClick={handleClearData}
+            disabled={clearingData}
+            className={`w-full py-3 px-4 rounded-lg font-semibold transition-all ${
+              clearingData
+                ? 'bg-gray-600 cursor-not-allowed text-gray-400'
+                : 'bg-red-600 hover:bg-red-700 active:scale-95 text-white'
+            }`}
+          >
+            {clearingData ? 'Clearing Data...' : 'Clear All Player Data & Cache'}
+          </button>
         </div>
 
         {/* Game Info */}

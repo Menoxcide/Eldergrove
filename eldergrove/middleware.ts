@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
+import { handleError } from '@/hooks/useErrorHandler'
 
 export async function middleware(request: NextRequest) {
   const requestUrl = new URL(request.url)
@@ -13,7 +14,7 @@ export async function middleware(request: NextRequest) {
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
   if (!supabaseUrl || !supabaseKey) {
-    console.error('Missing Supabase environment variables in middleware')
+    handleError(new Error('Missing Supabase environment variables in middleware'), 'Middleware configuration error')
     return NextResponse.redirect(new URL('/login', request.url))
   }
 

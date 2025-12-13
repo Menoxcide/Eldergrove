@@ -3,10 +3,12 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
+import { useErrorHandler } from '@/hooks/useErrorHandler';
 
 export default function OAuthCallbackPage() {
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
+  const { handleError } = useErrorHandler();
 
   useEffect(() => {
     const handleCallback = async () => {
@@ -21,9 +23,7 @@ export default function OAuthCallbackPage() {
         }
 
         if (sessionError) {
-          if (process.env.NODE_ENV === 'development') {
-            console.error('Session error:', sessionError);
-          }
+          handleError(sessionError, 'Session error during OAuth callback');
           setError(sessionError.message || 'Failed to establish session');
           return;
         }
@@ -42,17 +42,13 @@ export default function OAuthCallbackPage() {
         const errorDescription = urlParams.get('error_description');
 
         if (error) {
-          if (process.env.NODE_ENV === 'development') {
-            console.error('OAuth error:', error, errorDescription);
-          }
+          handleError(new Error(errorDescription || error || 'OAuth authentication failed'), 'OAuth error during callback');
           setError(errorDescription || error || 'OAuth authentication failed');
           return;
         }
 
         // If no session and no error, something went wrong
-        if (process.env.NODE_ENV === 'development') {
-          console.error('No session established and no error reported');
-        }
+        handleError(new Error('No session established and no error reported'), 'OAuth callback failed - no session or error');
         setError('Authentication failed - please try again');
 
       } catch (err: unknown) {

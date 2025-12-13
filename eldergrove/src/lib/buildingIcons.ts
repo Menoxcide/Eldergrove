@@ -95,13 +95,63 @@ export const BUILDING_ICONS: Record<string, BuildingIconConfig> = {
     color: '#228B22', // Forest green
     badgeColor: '#32CD32', // Lime green
   },
+  
+  // Required game buildings
+  farm: {
+    icon: '🌱',
+    categoryIcon: '🏭',
+    productionIcon: '🌾', // Produces crops
+    color: '#90EE90', // Light green
+    badgeColor: '#32CD32', // Lime green
+  },
+  factory: {
+    icon: '⚙️',
+    categoryIcon: '🏭',
+    productionIcon: '🔧', // Produces items
+    color: '#708090', // Slate gray
+    badgeColor: '#2F4F4F', // Dark slate gray
+  },
+  mine: {
+    icon: '⛏️',
+    categoryIcon: '🏭',
+    productionIcon: '💎', // Produces ores
+    color: '#8B4513', // Saddle brown
+    badgeColor: '#654321', // Dark brown
+  },
+  armory: {
+    icon: '🛡️',
+    categoryIcon: '🏭',
+    productionIcon: '⚔️', // Produces weapons
+    color: '#B22222', // Fire brick
+    badgeColor: '#8B0000', // Dark red
+  },
+  zoo: {
+    icon: '🐾',
+    categoryIcon: '🏘️',
+    functionIcon: '🐾', // Animal breeding/population
+    color: '#FF6347', // Tomato
+    badgeColor: '#FF4500', // Orange red
+  },
+  coven: {
+    icon: '👥',
+    categoryIcon: '🏘️',
+    functionIcon: '👥', // Community/population
+    color: '#9370DB', // Medium purple
+    badgeColor: '#8A2BE2', // Blue violet
+  },
 };
 
 /**
  * Get building icon configuration
+ * Always returns a valid config - uses default fallback if building type not found
  */
-export function getBuildingIcon(buildingType: string): BuildingIconConfig | null {
-  return BUILDING_ICONS[buildingType] || null;
+export function getBuildingIcon(buildingType: string): BuildingIconConfig {
+  return BUILDING_ICONS[buildingType] || {
+    icon: '🏠',
+    categoryIcon: '🏗️',
+    color: '#666666',
+    badgeColor: '#888888',
+  };
 }
 
 /**

@@ -371,7 +371,7 @@ export const getCropTooltip = (
 
 // Building Tooltips
 export const getBuildingTooltip = (
-  buildingType: { name: string; category: string; base_cost_crystals: number; provides_population: number; population_required: number },
+  buildingType: { name: string; category: string; base_cost_crystals: number; provides_population: number; population_required: number; level_required?: number; prerequisite_building_type?: string | null },
   level?: number
 ): TooltipSection[] => {
   const sections: TooltipSection[] = [
@@ -415,15 +415,27 @@ export const getBuildingTooltip = (
     });
   }
 
+  const requirements: string[] = [];
   if (buildingType.population_required > 0) {
+    requirements.push(`Requires ${buildingType.population_required} population`);
+  }
+  if (buildingType.level_required && buildingType.level_required > 1) {
+    requirements.push(`Requires level ${buildingType.level_required}`);
+  }
+  if (buildingType.prerequisite_building_type) {
+    requirements.push(`Requires ${buildingType.prerequisite_building_type} to be built first`);
+  }
+
+  if (requirements.length > 0) {
     sections.push({
       title: 'Requirements',
       icon: '⚠️',
       color: 'red',
       content: (
         <div className="space-y-1 text-xs">
-          <p>• Requires {buildingType.population_required} population</p>
-          <p>• Build other structures first to meet requirement</p>
+          {requirements.map((req, idx) => (
+            <p key={idx}>• {req}</p>
+          ))}
         </div>
       ),
     });

@@ -105,9 +105,7 @@ export const useFactoryStore = create<FactoryState>((set, get) => ({
       if (error) throw error
       set({ slotInfo: data })
     } catch (err: unknown) {
-      if (process.env.NODE_ENV === 'development') {
-        console.error('Error fetching factory slot info:', err)
-      }
+      handleError(err, 'Error fetching factory slot info')
     }
   },
   purchaseFactorySlot: async () => {
@@ -198,21 +196,17 @@ export const useFactoryStore = create<FactoryState>((set, get) => ({
         { event: '*', schema: 'public', table: 'factory_queue' },
         () => {
           get().fetchQueue().catch((err) => {
-            if (process.env.NODE_ENV === 'development') {
-              console.error('Error in subscription callback:', err)
-            }
+            handleError(err, 'Error in subscription callback')
           })
         }
       )
       .subscribe((status) => {
-        if (status === 'SUBSCRIBED' && process.env.NODE_ENV === 'development') {
-          console.log('Subscribed to factory queue updates')
+        if (status === 'SUBSCRIBED') {
+          // Subscription successful - no need to log in production
         } else if (status === 'CHANNEL_ERROR') {
           const { setError } = get()
           setError('Failed to subscribe to real-time updates')
-          if (process.env.NODE_ENV === 'development') {
-            console.error('Subscription error for factory queue')
-          }
+          handleError(new Error('Subscription error for factory queue'), 'Failed to subscribe to factory queue updates')
         }
       })
 
@@ -229,14 +223,7 @@ export const useFactoryStore = create<FactoryState>((set, get) => ({
         p_recipe_name: recipe_name
       })
       if (error) {
-        // Log detailed error information before throwing
-        if (process.env.NODE_ENV === 'development') {
-          console.error(`Start production failed for factory ${factory_type}, recipe ${recipe_name}:`, {
-          message: error.message || 'No message',
-          details: error.details || null,
-          hint: error.hint || null,
-          code: error.code || null,
-        })
+        handleError(error, `Failed to start production for ${recipe_name} in ${factory_type}`)
         throw error
       }
       await fetchQueue()
@@ -263,14 +250,7 @@ export const useFactoryStore = create<FactoryState>((set, get) => ({
         p_slot: slot
       })
       if (error) {
-        // Log detailed error information before throwing
-        if (process.env.NODE_ENV === 'development') {
-          console.error(`Collect factory failed for slot ${slot}:`, {
-          message: error.message || 'No message',
-          details: error.details || null,
-          hint: error.hint || null,
-          code: error.code || null,
-        })
+        handleError(error, `Failed to collect factory slot ${slot}`)
         throw error
       }
 
@@ -342,9 +322,7 @@ export const useFactoryStore = create<FactoryState>((set, get) => ({
             output: typeof recipe.output === 'string' ? JSON.parse(recipe.output) : recipe.output
           }
         } catch (parseError) {
-          if (process.env.NODE_ENV === 'development') {
-            console.error('Error parsing recipe JSON:', parseError, recipe)
-          }
+          handleError(parseError, `Error parsing recipe JSON for ${recipe?.name || 'unknown recipe'}`)
           return {
             ...recipe,
             input: {},

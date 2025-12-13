@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useFarmStore, type FarmState, type Crop } from '@/stores/useFarmStore';
 import { useInventoryStore } from '@/stores/useInventoryStore';
@@ -9,7 +9,7 @@ import { useSpeedUpsStore } from '@/stores/useSpeedUpsStore';
 import { usePremiumShopStore } from '@/stores/usePremiumShopStore';
 import { useAdSpeedUp } from '@/hooks/useAdSpeedUp';
 import { getItemIcon, getSeedItemId } from '@/lib/itemUtils';
-import { useErrorHandler } from '@/hooks/useErrorHandler';
+import { useErrorHandler, handleError } from '@/hooks/useErrorHandler';
 import Tooltip from '@/components/ui/Tooltip';
 import { getCropTooltip, getActionTooltip } from '@/lib/tooltipUtils';
 
@@ -97,9 +97,9 @@ const CropField: React.FC<CropFieldProps> = React.memo(({ plot }) => {
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : String(error);
           // Don't log or retry for race conditions (already harvested)
-          if (!errorMessage.toLowerCase().includes('no crop to harvest') && 
+          if (!errorMessage.toLowerCase().includes('no crop to harvest') &&
               !errorMessage.toLowerCase().includes('already harvested')) {
-            console.error('Auto-harvest failed:', error);
+            handleError(error, 'Auto-harvest failed');
             setHarvestRetryCount(prev => prev + 1);
             // Only reset hasAutoHarvested if we haven't exceeded max retries
             if (harvestRetryCount < 2) {
@@ -127,12 +127,12 @@ const CropField: React.FC<CropFieldProps> = React.memo(({ plot }) => {
     }
   }, [crop_id, hasAutoHarvested]);
 
-  const formatTime = (seconds: number): string => {
+  const formatTime = useCallback((seconds: number): string => {
     if (seconds === 0) return 'Ready!';
     const minutes = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
     return `${minutes}:${secs.toString().padStart(2, '0')}`;
-  };
+  }, []);
 
   const handlePlantCrop = useCallback(async (cropId: number) => {
     try {

@@ -75,6 +75,49 @@ export function getZIndex(gridX: number, gridY: number, gridSize: number = 20): 
 }
 
 /**
+ * Z-index constants for proper layering
+ * Terrain: 0-999 (base layer)
+ * Roads: 1000-1999 (above terrain)
+ * Buildings: 2000+ (above roads and terrain)
+ */
+export const Z_INDEX_TERRAIN = 0;
+export const Z_INDEX_ROAD_BASE = 1000;
+export const Z_INDEX_BUILDING_BASE = 2000;
+
+/**
+ * Get z-index for terrain tiles
+ * @param gridX Grid X coordinate
+ * @param gridY Grid Y coordinate
+ * @param gridSize Total grid size
+ * @returns Z-index for terrain (0-999 range)
+ */
+export function getTerrainZIndex(gridX: number, gridY: number, gridSize: number = 20): number {
+  return Z_INDEX_TERRAIN + getZIndex(gridX, gridY, gridSize);
+}
+
+/**
+ * Get z-index for road tiles
+ * @param gridX Grid X coordinate
+ * @param gridY Grid Y coordinate
+ * @param gridSize Total grid size
+ * @returns Z-index for roads (1000-1999 range)
+ */
+export function getRoadZIndex(gridX: number, gridY: number, gridSize: number = 20): number {
+  return Z_INDEX_ROAD_BASE + getZIndex(gridX, gridY, gridSize);
+}
+
+/**
+ * Get z-index for buildings
+ * @param gridX Grid X coordinate
+ * @param gridY Grid Y coordinate
+ * @param gridSize Total grid size
+ * @returns Z-index for buildings (2000+ range)
+ */
+export function getBuildingZIndex(gridX: number, gridY: number, gridSize: number = 20): number {
+  return Z_INDEX_BUILDING_BASE + getZIndex(gridX, gridY, gridSize);
+}
+
+/**
  * Calculate bounding box in isometric space for multi-tile buildings
  * @param gridX Top-left grid X coordinate
  * @param gridY Top-left grid Y coordinate

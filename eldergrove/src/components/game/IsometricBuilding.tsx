@@ -4,7 +4,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { BuildingType } from '@/stores/useCityStore';
 import { getBuildingAsset } from '@/config/isometricAssets';
 import { useAssetStore } from '@/stores/useAssetStore';
-import { gridToIsometric, getZIndex, getIsometricBoundingBox, TILE_WIDTH, TILE_HEIGHT } from '@/lib/isometricUtils';
+import { gridToIsometric, getBuildingZIndex, getIsometricBoundingBox, TILE_WIDTH, TILE_HEIGHT } from '@/lib/isometricUtils';
 import { getBuildingIcon, getCategoryColor } from '@/lib/buildingIcons';
 
 interface IsometricBuildingProps {
@@ -42,7 +42,12 @@ const IsometricBuilding: React.FC<IsometricBuildingProps> = ({
   
   // Calculate isometric position
   const isoPos = useMemo(() => gridToIsometric(gridX, gridY), [gridX, gridY]);
-  const zIndex = useMemo(() => getZIndex(gridX, gridY), [gridX, gridY]);
+  // Use building-specific z-index function to ensure buildings render above terrain and roads
+  const zIndex = useMemo(() => {
+    // Estimate grid size (default to 20 if not provided)
+    // Buildings should always be above terrain (0-999) and roads (1000-1999)
+    return getBuildingZIndex(gridX, gridY, 20);
+  }, [gridX, gridY]);
   
   // Calculate bounding box for multi-tile buildings
   const boundingBox = useMemo(() => getIsometricBoundingBox(
@@ -56,27 +61,37 @@ const IsometricBuilding: React.FC<IsometricBuildingProps> = ({
   const displayWidth = boundingBox.width;
   const displayHeight = boundingBox.height;
   
-  // Image caching and preloading
+  // Image caching and preloading with better error handling
   useEffect(() => {
     if (assetUrl) {
       // Check if image is already cached
       const img = new Image();
+      let cancelled = false;
+      
       img.onload = () => {
+        if (cancelled) return;
         setImageLoaded(true);
         setImageError(false);
       };
-      img.onerror = () => {
+      img.onerror = (error) => {
+        if (cancelled) return;
+        console.warn(`[IsometricBuilding] Failed to load building asset for ${buildingType.building_type} at (${gridX}, ${gridY}):`, error);
         setImageError(true);
         setImageLoaded(false);
       };
       
       // Set src to trigger load (browser will use cache if available)
       img.src = assetUrl;
+      
+      return () => {
+        cancelled = true;
+      };
     } else {
+      console.warn(`[IsometricBuilding] No asset URL for building type: ${buildingType.building_type} at (${gridX}, ${gridY})`);
       setImageLoaded(false);
       setImageError(false);
     }
-  }, [assetUrl]);
+  }, [assetUrl, buildingType.building_type, gridX, gridY]);
   
   // Fallback to CSS-based rendering if no asset URL
   const useFallback = !assetUrl || imageError;
@@ -87,7 +102,7 @@ const IsometricBuilding: React.FC<IsometricBuildingProps> = ({
     top: `${isoPos.y}px`,
     width: `${displayWidth}px`,
     height: `${displayHeight}px`,
-    zIndex: zIndex + (isPreview ? 1000 : 0),
+    zIndex: zIndex + (isPreview ? 1000 : 0), // Preview gets extra z-index boost
     opacity: isPreview ? 0.65 : 1,
     pointerEvents: onClick || onMouseEnter || onMouseLeave ? 'auto' : 'none',
     cursor: onClick ? 'pointer' : 'default',
@@ -134,7 +149,7 @@ const IsometricBuilding: React.FC<IsometricBuildingProps> = ({
         >
           {/* Building icon */}
           <div style={{ fontSize: '32px', marginBottom: '4px' }}>
-            {iconConfig?.icon || buildingType.name.charAt(0)}
+            {iconConfig.icon}
           </div>
           
           {/* Category badge */}

@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/client'
 import { get, set } from 'idb-keyval'
+import { handleError } from '@/hooks/useErrorHandler'
 
 const QUEUE_KEY = 'eldergrove-offline-queue'
 
@@ -75,7 +76,7 @@ export function useOfflineQueue() {
         useGameMessageStore.getState().addMessage('info', 'Action queued for later processing')
         return false
       } else {
-        console.error('Non-network RPC error:', error)
+        handleError(error, 'Non-network RPC error')
         throw error
       }
     }

@@ -39,7 +39,7 @@ BEGIN
   END IF;
 
   -- Check eligibility
-  SELECT can_watch_ad() INTO v_eligibility;
+  SELECT can_watch_ad(NULL) INTO v_eligibility;
   v_can_watch := (v_eligibility->>'can_watch')::BOOLEAN;
 
   IF NOT v_can_watch THEN
@@ -198,7 +198,7 @@ BEGIN
   );
 
   -- Return success result
-  SELECT can_watch_ad() INTO v_eligibility;
+  SELECT can_watch_ad(NULL) INTO v_eligibility;
   RETURN jsonb_build_object(
     'success', true,
     'minutes_reduced', p_minutes_reduced,

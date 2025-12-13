@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { BUILDING_ASSETS, ROAD_ASSETS, TERRAIN_ASSETS, type BuildingAssetConfig } from '@/config/isometricAssets';
+import { BUILDING_ASSETS, ROAD_ASSETS, TERRAIN_ASSETS, ADDITIONAL_TERRAIN_ASSETS, type BuildingAssetConfig } from '@/config/isometricAssets';
 
 // Image cache for preloaded images
 const imageCache = new Map<string, HTMLImageElement>();
@@ -51,6 +51,7 @@ interface AssetState {
   getBuildingAssetUrl: (buildingType: string) => string | null;
   getRoadAssetUrl: (roadType: string) => string | null;
   getTerrainAssetUrl: (terrainType?: string) => string | null;
+  getAdditionalTerrainAssetUrl: (terrainType: string) => string | null;
   preloadBuildingAssets: () => Promise<void>;
   preloadAllAssets: () => Promise<void>;
   getCachedImage: (url: string) => HTMLImageElement | null;
@@ -147,12 +148,25 @@ export const useAssetStore = create<AssetState>((set, get) => ({
       null
     );
   },
+
+  getAdditionalTerrainAssetUrl: (terrainType: string) => {
+    const state = get();
+    // First check store URLs, then fall back to config
+    const additionalTerrain = ADDITIONAL_TERRAIN_ASSETS[terrainType];
+    if (!additionalTerrain) return null;
+
+    return (
+      state.terrainAssetUrls[terrainType] ||
+      additionalTerrain.tileMap[terrainType] ||
+      null
+    );
+  },
   
   preloadBuildingAssets: async () => {
     const state = get();
     const preloadPromises: Promise<void>[] = [];
     
-    // Preload all building assets
+    // Preload all building assets with retry logic
     Object.entries(BUILDING_ASSETS).forEach(([buildingType, config]) => {
       if (config.imageUrl && !state.preloadingAssets.has(config.imageUrl)) {
         state.preloadingAssets.add(config.imageUrl);
@@ -162,7 +176,8 @@ export const useAssetStore = create<AssetState>((set, get) => ({
               get().markBuildingAssetLoaded(buildingType);
             })
             .catch((error) => {
-              console.warn(`Failed to preload building asset for ${buildingType}:`, error);
+              console.warn(`[useAssetStore] Failed to preload building asset for ${buildingType}:`, error);
+              // Don't throw - allow fallback rendering
             })
         );
       }
@@ -173,28 +188,59 @@ export const useAssetStore = create<AssetState>((set, get) => ({
   
   preloadAllAssets: async () => {
     const state = get();
-    
-    // Preload buildings
-    await get().preloadBuildingAssets();
-    
-    // Preload terrain tileset
-    if (TERRAIN_ASSETS.baseTileUrl && !state.preloadingAssets.has(TERRAIN_ASSETS.baseTileUrl)) {
-      state.preloadingAssets.add(TERRAIN_ASSETS.baseTileUrl);
-      await preloadImage(TERRAIN_ASSETS.baseTileUrl)
-        .then(() => get().markTerrainAssetsLoaded())
-        .catch((error) => {
-          console.warn('Failed to preload terrain tileset:', error);
-        });
+
+    try {
+      // Preload buildings
+      await get().preloadBuildingAssets();
+    } catch (error) {
+      console.warn('[useAssetStore] Error preloading building assets:', error);
     }
-    
-    // Preload road tileset
-    if (ROAD_ASSETS.imageUrl && !state.preloadingAssets.has(ROAD_ASSETS.imageUrl)) {
-      state.preloadingAssets.add(ROAD_ASSETS.imageUrl);
-      await preloadImage(ROAD_ASSETS.imageUrl)
-        .then(() => get().markRoadAssetsLoaded())
-        .catch((error) => {
-          console.warn('Failed to preload road tileset:', error);
-        });
+
+    try {
+      // Preload main terrain tileset
+      if (TERRAIN_ASSETS.baseTileUrl && !state.preloadingAssets.has(TERRAIN_ASSETS.baseTileUrl)) {
+        state.preloadingAssets.add(TERRAIN_ASSETS.baseTileUrl);
+        await preloadImage(TERRAIN_ASSETS.baseTileUrl)
+          .then(() => get().markTerrainAssetsLoaded())
+          .catch((error) => {
+            console.warn('[useAssetStore] Failed to preload terrain tileset:', error);
+            // Don't throw - allow fallback rendering
+          });
+      }
+    } catch (error) {
+      console.warn('[useAssetStore] Error preloading terrain assets:', error);
+    }
+
+    try {
+      // Preload additional terrain tilesets
+      const additionalTerrainPromises = Object.entries(ADDITIONAL_TERRAIN_ASSETS).map(async ([terrainType, config]) => {
+        if (config.baseTileUrl && !state.preloadingAssets.has(config.baseTileUrl)) {
+          state.preloadingAssets.add(config.baseTileUrl);
+          return preloadImage(config.baseTileUrl)
+            .catch((error) => {
+              console.warn(`[useAssetStore] Failed to preload additional terrain tileset ${terrainType}:`, error);
+            });
+        }
+      });
+
+      await Promise.allSettled(additionalTerrainPromises);
+    } catch (error) {
+      console.warn('[useAssetStore] Error preloading additional terrain assets:', error);
+    }
+
+    try {
+      // Preload road tileset
+      if (ROAD_ASSETS.imageUrl && !state.preloadingAssets.has(ROAD_ASSETS.imageUrl)) {
+        state.preloadingAssets.add(ROAD_ASSETS.imageUrl);
+        await preloadImage(ROAD_ASSETS.imageUrl)
+          .then(() => get().markRoadAssetsLoaded())
+          .catch((error) => {
+            console.warn('[useAssetStore] Failed to preload road tileset:', error);
+            // Don't throw - allow fallback rendering
+          });
+      }
+    } catch (error) {
+      console.warn('[useAssetStore] Error preloading road assets:', error);
     }
   },
   

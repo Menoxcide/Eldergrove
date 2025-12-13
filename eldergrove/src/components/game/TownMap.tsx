@@ -13,14 +13,14 @@ import IsometricBuilding from '@/components/game/IsometricBuilding';
 import IsometricTerrain from '@/components/game/IsometricTerrain';
 import Tooltip from '@/components/ui/Tooltip';
 import { getBuildingTooltip, getActionTooltip } from '@/lib/tooltipUtils';
-import { gridToIsometric, isometricToGrid, getZIndex, TILE_WIDTH, TILE_HEIGHT } from '@/lib/isometricUtils';
+import { gridToIsometric, isometricToGrid, getZIndex, TILE_WIDTH, TILE_HEIGHT, Z_INDEX_BUILDING_BASE } from '@/lib/isometricUtils';
 import { useAssetStore } from '@/stores/useAssetStore';
 
 interface TownMapProps {
   loading?: boolean;
 }
 
-const TownMap: React.FC<TownMapProps> = ({ loading = false }) => {
+const TownMap: React.FC<TownMapProps> = React.memo(({ loading = false }) => {
   const { claimDailyReward, crystals, population, townSize, expandTown, getExpansionCost, fetchPlayerProfile, loading: playerLoading, level: playerLevel } = usePlayerStore();
   const { 
     buildings, 
@@ -83,18 +83,24 @@ const TownMap: React.FC<TownMapProps> = ({ loading = false }) => {
     
     // Preload all isometric assets in the background
     preloadAllAssets().catch((error) => {
-      console.warn('Failed to preload some assets:', error);
+      console.warn('[TownMap] Failed to preload some assets:', error);
     });
     
     const unsubscribeBuildings = subscribeToBuildings();
     const unsubscribeDecorations = subscribeToDecorations();
     const unsubscribeRoads = subscribeToRoads();
+    
+    // Debug logging in development
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[TownMap] Initialized with grid size:', GRID_SIZE);
+    }
+    
     return () => {
       unsubscribeBuildings();
       unsubscribeDecorations();
       unsubscribeRoads();
     };
-  }, [fetchPlayerProfile, fetchBuildings, fetchBuildingTypes, fetchDecorations, fetchDecorationTypes, fetchRoads, subscribeToBuildings, subscribeToDecorations, subscribeToRoads, preloadAllAssets]);
+  }, [fetchPlayerProfile, fetchBuildings, fetchBuildingTypes, fetchDecorations, fetchDecorationTypes, fetchRoads, subscribeToBuildings, subscribeToDecorations, subscribeToRoads, preloadAllAssets, GRID_SIZE]);
 
   useEffect(() => {
     if (showExpansionModal) {
@@ -467,10 +473,17 @@ const TownMap: React.FC<TownMapProps> = ({ loading = false }) => {
                     const building = buildings.find(b => b.building_type === bt.building_type);
                     const currentCount = buildings.filter(b => b.building_type === bt.building_type).length;
                     const isAtLimit = bt.max_count !== null && currentCount >= bt.max_count;
-                    const canAfford = crystals >= bt.base_cost_crystals;
+                    const isFirstBuilding = currentCount === 0;
+                    const actualCost = isFirstBuilding ? 0 : bt.base_cost_crystals;
+                    const canAfford = crystals >= actualCost;
                     const hasPopulation = (bt.population_required || 0) <= (population ?? 0);
                     const hasLevel = (bt.level_required || 1) <= (playerLevel || 1);
-                    const isDisabled = isAtLimit || !canAfford || !hasPopulation || !hasLevel;
+                    
+                    // Check prerequisite building
+                    const hasPrerequisite = !bt.prerequisite_building_type || 
+                      buildings.some(b => b.building_type === bt.prerequisite_building_type);
+                    
+                    const isDisabled = isAtLimit || !canAfford || !hasPopulation || !hasLevel || !hasPrerequisite;
                     
                     return (
                       <Tooltip 
@@ -492,8 +505,17 @@ const TownMap: React.FC<TownMapProps> = ({ loading = false }) => {
                           <div className="flex items-center gap-3">
                             <BuildingVisual buildingType={bt} size={{ width: 40, height: 40 }} className="flex-shrink-0" />
                             <div className="flex-1 min-w-0">
-                              <div className="text-white font-semibold text-sm">{bt.name}</div>
-                              <div className="text-yellow-400 text-xs">💎 {bt.base_cost_crystals}</div>
+                              <div className="flex items-center gap-2">
+                                <div className="text-white font-semibold text-sm">{bt.name}</div>
+                                {isFirstBuilding && (
+                                  <span className="px-1.5 py-0.5 bg-green-600 text-white text-xs font-bold rounded">
+                                    FREE
+                                  </span>
+                                )}
+                              </div>
+                              <div className={`text-xs ${isFirstBuilding ? 'text-green-400 font-semibold' : 'text-yellow-400'}`}>
+                                💎 {isFirstBuilding ? 'FREE' : actualCost.toLocaleString()}
+                              </div>
                               <div className="flex items-center gap-2 text-xs flex-wrap">
                                 <span className="text-slate-400">{bt.size_x}x{bt.size_y}</span>
                                 {bt.max_count !== null && (
@@ -514,9 +536,19 @@ const TownMap: React.FC<TownMapProps> = ({ loading = false }) => {
                                     Lv {bt.level_required}
                                   </span>
                                 )}
+                                {bt.prerequisite_building_type && (
+                                  <span className={`${hasPrerequisite ? 'text-green-400' : 'text-red-400'}`}>
+                                    {hasPrerequisite ? '✓' : '✗'} {buildingTypes.find(b => b.building_type === bt.prerequisite_building_type)?.name || bt.prerequisite_building_type}
+                                  </span>
+                                )}
                               </div>
                               {isAtLimit && (
                                 <div className="text-red-400 text-xs mt-1">Limit reached</div>
+                              )}
+                              {!hasPrerequisite && bt.prerequisite_building_type && (
+                                <div className="text-red-400 text-xs mt-1">
+                                  Requires {buildingTypes.find(b => b.building_type === bt.prerequisite_building_type)?.name || bt.prerequisite_building_type}
+                                </div>
                               )}
                             </div>
                           </div>
@@ -623,22 +655,33 @@ const TownMap: React.FC<TownMapProps> = ({ loading = false }) => {
                       transform: `translate(calc(-50% + ${-centerX}px), calc(-50% + ${-centerY}px))`,
                     }}
                   >
-                    {/* Render terrain tiles */}
+                    {/* Render terrain tiles - render everywhere as base layer */}
                     {Array.from({ length: GRID_SIZE }, (_, rowIndex) =>
                       Array.from({ length: GRID_SIZE }, (_, colIndex) => {
                         const road = getRoadAtCell(colIndex, rowIndex);
-                        // Only render terrain if there's no road (roads will render on top)
-                        if (!road) {
-                          return (
-                            <IsometricTerrain
-                              key={`terrain-${colIndex}-${rowIndex}`}
-                              gridX={colIndex}
-                              gridY={rowIndex}
-                              terrainType="grass"
-                            />
-                          );
-                        }
-                        return null;
+                        const building = getBuildingAtCell(colIndex, rowIndex);
+                        const decoration = getDecorationAtCell(colIndex, rowIndex);
+                        
+                        // Render terrain everywhere as base layer (roads and buildings render on top)
+                        // Check if at map edge
+                        const isAtMapEdge = colIndex === 0 || colIndex === GRID_SIZE - 1 || 
+                                          rowIndex === 0 || rowIndex === GRID_SIZE - 1;
+                        
+                        return (
+                          <IsometricTerrain
+                            key={`terrain-${colIndex}-${rowIndex}`}
+                            gridX={colIndex}
+                            gridY={rowIndex}
+                            gridSize={GRID_SIZE}
+                            terrainType="grass"
+                            hasRoadNorth={false}
+                            hasRoadSouth={false}
+                            hasRoadEast={false}
+                            hasRoadWest={false}
+                            isAtMapEdge={isAtMapEdge}
+                            hasBuilding={!!building}
+                          />
+                        );
                       })
                     )}
                     
@@ -687,20 +730,28 @@ const TownMap: React.FC<TownMapProps> = ({ loading = false }) => {
                     })}
                     
                     {/* Render buildings with proper depth sorting */}
-                    {buildings
-                      .map(building => {
-                        const buildingType = buildingTypes.find(bt => bt.building_type === building.building_type);
-                        return buildingType ? { building, buildingType } : null;
-                      })
-                      .filter((item): item is { building: typeof buildings[0], buildingType: typeof buildingTypes[0] } => item !== null)
-                      .sort((a, b) => {
-                        // Sort by Y first (south = higher z-index), then by X
-                        if (a.building.grid_y !== b.building.grid_y) {
-                          return a.building.grid_y - b.building.grid_y;
-                        }
-                        return a.building.grid_x - b.building.grid_x;
-                      })
-                      .map(({ building, buildingType }) => (
+                    {(() => {
+                      // Debug logging for buildings
+                      if (buildings.length > 0 && process.env.NODE_ENV === 'development') {
+                        console.log(`[TownMap] Rendering ${buildings.length} buildings`);
+                      }
+                      return buildings
+                        .map(building => {
+                          const buildingType = buildingTypes.find(bt => bt.building_type === building.building_type);
+                          if (!buildingType && process.env.NODE_ENV === 'development') {
+                            console.warn(`[TownMap] Building ${building.id} has unknown type: ${building.building_type}`);
+                          }
+                          return buildingType ? { building, buildingType } : null;
+                        })
+                        .filter((item): item is { building: typeof buildings[0], buildingType: typeof buildingTypes[0] } => item !== null)
+                        .sort((a, b) => {
+                          // Sort by Y first (south = higher z-index), then by X
+                          if (a.building.grid_y !== b.building.grid_y) {
+                            return a.building.grid_y - b.building.grid_y;
+                          }
+                          return a.building.grid_x - b.building.grid_x;
+                        })
+                        .map(({ building, buildingType }) => (
                         <IsometricBuilding
                           key={`building-${building.id}`}
                           buildingType={buildingType}
@@ -732,7 +783,8 @@ const TownMap: React.FC<TownMapProps> = ({ loading = false }) => {
                             }
                           }}
                         />
-                      ))}
+                      ));
+                    })()}
                     
                     {/* Render building preview */}
                     {placementMode === 'place' && selectedBuildingTypeData && hoveredCell && canPlaceBuilding(selectedBuildingTypeData, hoveredCell.x, hoveredCell.y) && (
@@ -809,7 +861,7 @@ const TownMap: React.FC<TownMapProps> = ({ loading = false }) => {
                               width: `${TILE_WIDTH}px`,
                               height: `${TILE_HEIGHT}px`,
                               transform: 'translate(-50%, -50%)',
-                              zIndex: getZIndex(colIndex, rowIndex, GRID_SIZE) + 2000, // Above buildings
+                              zIndex: Z_INDEX_BUILDING_BASE + getZIndex(colIndex, rowIndex, GRID_SIZE) + 1000, // Above buildings for interaction
                               cursor: placementMode !== 'view' ? 'pointer' : 'default',
                               border: highlightClass ? '2px solid' : 'none',
                             }}
@@ -980,6 +1032,8 @@ const TownMap: React.FC<TownMapProps> = ({ loading = false }) => {
       )}
     </div>
   );
-};
+});
+
+TownMap.displayName = 'TownMap';
 
 export default TownMap;

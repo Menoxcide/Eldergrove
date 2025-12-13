@@ -6,6 +6,7 @@ import { useOfflineQueue } from '@/hooks/useOfflineQueue';
 import { useSpeedUpsStore } from '@/stores/useSpeedUpsStore';
 import { usePremiumShopStore } from '@/stores/usePremiumShopStore';
 import { useAdSpeedUp } from '@/hooks/useAdSpeedUp';
+import { useErrorHandler } from '@/hooks/useErrorHandler';
 import { useArmoryStore } from '@/stores/useArmoryStore';
 import { createClient } from '@/lib/supabase/client';
 import Tooltip from '@/components/ui/Tooltip';
@@ -23,6 +24,7 @@ const ArmoryQueueSlot: React.FC<ArmoryQueueSlotProps> = React.memo(({ queueItem 
   const [showSpeedUpModal, setShowSpeedUpModal] = useState(false);
   const { queueAction } = useOfflineQueue();
   const { applyArmorySpeedUp } = useSpeedUpsStore();
+  const { handleError } = useErrorHandler();
   const { items: premiumItems, purchaseItem } = usePremiumShopStore();
   const { watchAdForSpeedUp, canWatchAd, adsRemaining, loading: adLoading } = useAdSpeedUp();
   const { fetchQueue } = useArmoryStore();
@@ -41,7 +43,7 @@ const ArmoryQueueSlot: React.FC<ArmoryQueueSlotProps> = React.memo(({ queueItem 
           setRecipeName(data.name);
         }
       } catch (error) {
-        console.error('Error fetching recipe name:', error);
+        handleError(error, 'Error fetching recipe name');
       }
     };
 
@@ -90,8 +92,15 @@ const ArmoryQueueSlot: React.FC<ArmoryQueueSlotProps> = React.memo(({ queueItem 
   };
 
   const handleWatchAd = async () => {
-    await watchAdForSpeedUp('armory', slot);
-    await fetchQueue();
+    try {
+      await watchAdForSpeedUp('armory', slot);
+      await fetchQueue();
+    } catch (error) {
+      // Error is handled in the hook, but ensure queue refreshes even on error
+      await fetchQueue().catch(() => {
+        // Silently fail queue refresh if it errors
+      });
+    }
   };
 
   const isReady = timeLeft <= 0 && finishes_at;

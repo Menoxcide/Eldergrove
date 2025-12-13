@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { useZooStore, type ZooEnclosure, type AnimalType } from '@/stores/useZooStore';
 import { usePlayerStore } from '@/stores/usePlayerStore';
 import { useAdSpeedUp } from '@/hooks/useAdSpeedUp';
@@ -428,7 +428,7 @@ export default function ZooPage() {
   const [newEnclosureName, setNewEnclosureName] = useState('');
   const [showCreateModal, setShowCreateModal] = useState(false);
   
-  const handleAddAnimal = async (enclosureId: number, animalTypeId: number, slot: number) => {
+  const handleAddAnimal = useCallback(async (enclosureId: number, animalTypeId: number, slot: number) => {
     const enclosure = enclosures.find(e => e.id === enclosureId);
     if (enclosure) {
       if (slot === 1 && enclosure.animal1_id !== null) {
@@ -464,7 +464,7 @@ export default function ZooPage() {
     }
     
     await addAnimalToEnclosure(enclosureId, animalTypeId, slot);
-  };
+  }, [enclosures, animalTypes, crystals, showError, addAnimalToEnclosure]);
 
   useEffect(() => {
     fetchEnclosures();
@@ -473,7 +473,7 @@ export default function ZooPage() {
     return unsubscribe;
   }, [fetchEnclosures, fetchAnimalTypes, subscribeToZoo]);
 
-  const handleCreateEnclosure = async () => {
+  const handleCreateEnclosure = useCallback(async () => {
     const trimmedName = newEnclosureName.trim();
     if (!trimmedName) {
       showError('Enclosure Name Required', 'Please enter a name for your enclosure.');
@@ -491,7 +491,7 @@ export default function ZooPage() {
     await createEnclosure(trimmedName);
     setNewEnclosureName('');
     setShowCreateModal(false);
-  };
+  }, [newEnclosureName, showError, createEnclosure]);
 
   if (loading) {
     return (

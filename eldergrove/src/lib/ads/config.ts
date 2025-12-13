@@ -13,3 +13,7 @@ export const ADMOB_REWARDED_AD_UNIT_ID_ANDROID = process.env.NEXT_PUBLIC_ADMOB_R
 // Test ad unit IDs (for development)
 export const ADMOB_TEST_REWARDED_AD_UNIT_ID = 'ca-app-pub-3940256099942544/5224354917';
 
+// Google Ad Manager configuration for web
+export const GAM_PUBLISHER_ID = process.env.NEXT_PUBLIC_GAM_PUBLISHER_ID || '';
+export const GAM_REWARDED_AD_UNIT_ID = process.env.NEXT_PUBLIC_GAM_REWARDED_AD_UNIT_ID || '';
+
